@@ -1,0 +1,27 @@
+services:
+  cyclops:
+    container_name: cyclops
+    image: cyclopsimg
+    env_file:
+      - '.env'
+    build: ./srcs/backend
+    init: true
+    networks:
+      - netone
+      
+  nginx:
+      container_name: nginx
+      build: ./srcs/nginx
+      image: nginximg
+      ports:
+        - '22222:80'
+      depends_on:
+        - cyclops
+      init: true
+      networks:
+        - netone
+      env_file:
+        - '.env'
+networks:
+    netone:
+      name: the_network
