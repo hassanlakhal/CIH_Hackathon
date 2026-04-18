@@ -27,7 +27,7 @@ class Wallet(models.Model):
         ('INWI', 'INWI'),
         ('ORANGE', 'Orange'),
     ]
-
+    isSurveyNeed = models.BooleanField(default=False)
     # ── Identity ──────────────────────────────────────────────
     phone_number = models.CharField(max_length=20, unique=True, db_index=True)
     provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, default='IAM')
@@ -229,3 +229,13 @@ class Transaction(models.Model):
     def api_type_code(self):
         """Return the API type code for this transaction."""
         return self.API_TYPE_MAP.get(self.transaction_type, self.transaction_type)
+
+class userSurvey(models.Model):
+    theWallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='survey')
+    digitalPlatforms = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    rent = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    groceries = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    utilities = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    entertainment = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    transportation = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    created_at = models.DateTimeField(auto_now_add=True)

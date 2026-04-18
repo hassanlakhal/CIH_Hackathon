@@ -314,3 +314,17 @@ class M2WConfirmationSerializer(serializers.Serializer):
     BeneficiaryPhoneNumber = serializers.CharField(max_length=20)
     Amount = serializers.DecimalField(max_digits=12, decimal_places=2)
     Otp = serializers.CharField(max_length=10)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 4.15  User Survey
+# ═══════════════════════════════════════════════════════════════
+
+class UserSurveyPostSerializer(serializers.Serializer):
+    phoneNumber = serializers.CharField(max_length=20)
+    digitalPlatforms = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)
+    rent = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)
+    groceries = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)
+    utilities = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)
+    entertainment = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)
+    transportation = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)

@@ -21,12 +21,8 @@ from .serializers import (
     DynamicQRCodeSerializer,
     M2WSimulationSerializer, M2WOTPSerializer, M2WConfirmationSerializer,
 )
+import requests
 from django.conf import settings
-from twilio.rest import Client
-
-account_sid = 'ACbd7353d92ad4275c69d19301401a652b'
-auth_token = '0adda11ac7d9c21fb65380629c7fcc9d'
-client = Client(account_sid, auth_token)
 
 def _safe_decimal(value, default='0'):
     """Safely convert a value to Decimal."""
@@ -82,13 +78,17 @@ def _wallet_precreate(request):
             wallet_type='CUSTOMER',
             status='PENDING',
         )
-        message = client.messages.create(
-              from_='whatsapp:+14155238886',
-              content_sid=settings.CONTENT_SID,
-              content_variables='{"1":"Mind Save Activation Code: 409173"}',
-              to=f'whatsapp:{data['phoneNumber'].strip()}'
-            )
-        print(f"STATUS OF SMS: {message}")
+        url = "https://api.ng.termii.com/api/sms/send"
+        payload = {
+            "to": data['phoneNumber'].strip(),
+            "from": "Mind Save",
+            "sms": f"Your Mind Save activation code is: {otp}",
+            "type": "plain",
+            "channel": "generic",
+            "api_key": settings.API_KEY_OTP
+        }
+        response = requests.post(url, json=payload)
+        print(response.json())
         return Response({
             'result': {
                 'activityArea': None,
@@ -1573,3 +1573,71 @@ def m2w_confirmation(request):
             'transferAmount': 0,
         }
     })
+
+
+@api_view(['POST', 'GET'])
+def survey_view(request):
+    """
+    POST /wallet/survey - Post user survey for needs
+    GET /wallet/survey?phoneNumber=X - Get user survey needs
+    """
+    if request.method == 'POST':
+        serializer = UserSurveyPostSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        
+        data = serializer.validated_data
+        token = data['token'].strip()
+        
+        try:
+            wallet = Wallet.objects.get(token=token)
+        except Wallet.DoesNotExist:
+            return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+        
+        survey = userSurvey.objects.create(
+            theWallet=wallet,
+            digitalPlatforms=data.get('digitalPlatforms', Decimal('0.00')),
+            rent=data.get('rent', Decimal('0.00')),
+            groceries=data.get('groceries', Decimal('0.00')),
+            utilities=data.get('utilities', Decimal('0.00')),
+            entertainment=data.get('entertainment', Decimal('0.00')),
+            transportation=data.get('transportation', Decimal('0.00'))
+        )
+        
+        wallet.isSurveyNeed = True
+        wallet.save()
+        
+        return Response({'message': 'Survey submitted successfully.'}, status=status.HTTP_201_CREATED)
+
+    elif request.method == 'GET':
+        phone = request.query_params.get('phoneNumber', '').strip()
+        if not phone:
+            return Response({'error': 'phoneNumber query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            wallet = Wallet.objects.get(phone_number=phone)
+        except Wallet.DoesNotExist:
+            return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+            
+        surveys = userSurvey.objects.filter(theWallet=wallet)
+        if not surveys.exists():
+            return Response({
+                'isSurveyNeed': wallet.isSurveyNeed,
+                'survey': None
+            })
+            
+        latest_survey = surveys.order_by('-created_at').first()
+        
+        return Response({
+            'isSurveyNeed': wallet.isSurveyNeed,
+            'survey': {
+                'id': latest_survey.id,
+                'createdAt': latest_survey.created_at,
+                'digitalPlatforms': float(latest_survey.digitalPlatforms),
+                'rent': float(latest_survey.rent),
+                'groceries': float(latest_survey.groceries),
+                'utilities': float(latest_survey.utilities),
+                'entertainment': float(latest_survey.entertainment),
+                'transportation': float(latest_survey.transportation),
+            }
+        })

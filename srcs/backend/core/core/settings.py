@@ -16,9 +16,7 @@ import os, dotenv
 dotenv.load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('SECRET_KEY')
-AUTH_TOKEN = os.getenv('AUTH_TOKEN')
-ACCOUNT_SID = os.getenv('ACCOUNT_SID')
-CONTENT_SID = os.getenv('CONTENT_SID')
+API_KEY_OTP=os.getenv('API_KEY_OTP')
 DEBUG = True
 
 ALLOWED_HOSTS = ['*']
