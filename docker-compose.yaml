@@ -8,7 +8,25 @@ services:
     init: true
     networks:
       - netone
+    volumes:
+      #For Project
+      - ./srcs/backend/core/core:/cyclops/core
+      - ./srcs/backend/core/wallet:/cyclops/wallet
 
+  nginx:
+    container_name: nginx
+    build: ./srcs/nginx
+    image: nginximg
+    ports:
+      - '22222:80'
+    depends_on:
+      - cyclops
+      - frontend
+    init: true
+    networks:
+      - netone
+    env_file:
+      - '.env'
   frontend:
     container_name: frontend
     image: frontendimg
@@ -20,21 +38,6 @@ services:
       - netone
     env_file:
       - '.env'
-      
-  nginx:
-      container_name: nginx
-      build: ./srcs/nginx
-      image: nginximg
-      ports:
-        - '22222:80'
-      depends_on:
-        - cyclops
-        - frontend
-      init: true
-      networks:
-        - netone
-      env_file:
-        - '.env'
 networks:
-    netone:
-      name: the_network
+  netone:
+    name: the_network

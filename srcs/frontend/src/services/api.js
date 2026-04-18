@@ -13,7 +13,11 @@ export const API_BASE_URL =
  * @returns {string} Full URL string.
  */
 function buildUrl(path, params = {}) {
-  const url = new URL(path, API_BASE_URL);
+  // Ensure base URL ends with a slash and path does not start with one
+  const baseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL : `${API_BASE_URL}/`;
+  const cleanPath = path.startsWith('/') ? path.substring(1) : path;
+  
+  const url = new URL(cleanPath, baseUrl);
   Object.entries(params).forEach(([key, value]) => {
     if (value !== undefined && value !== null) {
       url.searchParams.append(key, value);

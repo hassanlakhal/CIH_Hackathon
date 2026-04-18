@@ -47,19 +47,15 @@ async function withFallback(apiFn, mockFn) {
 // Body contains official registration fields (phoneNumber, clientFirstName, etc.)
 // state is a query parameter, NOT in the body.
 export function precreateWallet(payload) {
-  return withFallback(
-    () => apiPost('/wallet', payload, { state: 'precreate' }),
-    () => mockPrecreateWallet(payload)
-  );
+  // Bypassing mocks: hitting real backend directly
+  return apiPost('/wallet', payload, { state: 'precreate' });
 }
 
 // ─── POST /wallet?state=activate ─────────────────────────────
 // Body contains { token, otp }
 export function activateWallet(payload) {
-  return withFallback(
-    () => apiPost('/wallet', payload, { state: 'activate' }),
-    () => mockActivateWallet(payload)
-  );
+  // Bypassing mocks: hitting real backend directly
+  return apiPost('/wallet', payload, { state: 'activate' });
 }
 
 // ─── POST /wallet/clientinfo ────────────────────────────────
