@@ -19,7 +19,7 @@ from .serializers import (
     MerchantCreationSerializer, MerchantActivationSerializer,
     M2MSimulationSerializer, M2MOTPSerializer, M2MConfirmationSerializer,
     DynamicQRCodeSerializer,
-    M2WSimulationSerializer, M2WOTPSerializer, M2WConfirmationSerializer,
+    M2WSimulationSerializer, M2WOTPSerializer, M2WConfirmationSerializer, UserSurveyPostSerializer
 )
 import requests
 from django.conf import settings
