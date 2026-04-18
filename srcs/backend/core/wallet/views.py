@@ -32,10 +32,17 @@ from .serializers import (
 )
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# Helper
-# ═══════════════════════════════════════════════════════════════════════
-
+def checkHealth(req):
+    if req.method == "GET":
+        now = datetime.now().strftime("%A, %d %B %Y - %H:%M:%S")
+        return HttpResponse(f"""
+            <div style="font-family: Arial; text-align: center; margin-top: 50px;">
+                <h1>Welcome to Cyclops</h1>
+                <p style="font-size: 18px; color: #555;">
+                    Current time: {now}
+                </p>
+            </div>
+        """)
 def _safe_decimal(value, default='0'):
     """Safely convert a value to Decimal."""
     try:
@@ -43,10 +50,6 @@ def _safe_decimal(value, default='0'):
     except (InvalidOperation, ValueError):
         return Decimal(default)
 
-
-# ═══════════════════════════════════════════════════════════════════════
-# 4.1  Creating a Wallet
-# ═══════════════════════════════════════════════════════════════════════
 
 @api_view(['POST'])
 def wallet_create(request):
@@ -184,9 +187,6 @@ def _wallet_activate(request):
     }, status=status.HTTP_200_OK)
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# 4.2  Consulting Customer Information
-# ═══════════════════════════════════════════════════════════════════════
 
 @api_view(['POST'])
 def client_info(request):
@@ -252,10 +252,6 @@ def client_info(request):
     })
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# 4.3  Transaction History
-# ═══════════════════════════════════════════════════════════════════════
-
 @api_view(['GET'])
 def operations_history(request):
     """GET /wallet/operations?contractid=X - Retrieve transaction history."""
@@ -298,7 +294,6 @@ def operations_history(request):
             'totalPage': max(1, transactions.count()),
         })
 
-    # If no transactions, return sample mock data
     if not results:
         results = [{
             'amount': '0.00',
@@ -329,10 +324,6 @@ def operations_history(request):
     return Response({'result': results})
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# 4.4  Balance Consultation
-# ═══════════════════════════════════════════════════════════════════════
-
 @api_view(['GET'])
 def wallet_balance(request):
     """GET /wallet/balance?contractid=X - Retrieve wallet balance."""
@@ -353,10 +344,6 @@ def wallet_balance(request):
         }
     })
 
-
-# ═══════════════════════════════════════════════════════════════════════
-# 4.5  Cash IN
-# ═══════════════════════════════════════════════════════════════════════
 
 @api_view(['POST'])
 def cash_in(request):
@@ -466,10 +453,6 @@ def _cash_in_confirmation(request):
         }
     })
 
-
-# ═══════════════════════════════════════════════════════════════════════
-# 4.6  Cash OUT
-# ═══════════════════════════════════════════════════════════════════════
 
 @api_view(['POST'])
 def cash_out(request):
@@ -602,10 +585,6 @@ def _cash_out_confirmation(request):
         }
     })
 
-
-# ═══════════════════════════════════════════════════════════════════════
-# 4.7  Wallet to Wallet
-# ═══════════════════════════════════════════════════════════════════════
 
 @api_view(['POST'])
 def wallet_to_wallet(request):
@@ -782,10 +761,6 @@ def _w2w_confirmation(request):
     })
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# 4.8  Transfer (Virement)
-# ═══════════════════════════════════════════════════════════════════════
-
 @api_view(['POST'])
 def transfer_virement(request):
     """
@@ -913,10 +888,6 @@ def _transfer_confirmation(request):
     })
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# 4.9  ATM Withdrawal
-# ═══════════════════════════════════════════════════════════════════════
-
 @api_view(['POST'])
 def atm_withdrawal(request):
     """
@@ -1039,10 +1010,6 @@ def _atm_confirmation(request):
         }
     })
 
-
-# ═══════════════════════════════════════════════════════════════════════
-# 4.10  Wallet to Merchant
-# ═══════════════════════════════════════════════════════════════════════
 
 @api_view(['POST'])
 def wallet_to_merchant(request):
@@ -1216,9 +1183,6 @@ def _w2m_confirmation(request):
     })
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# 4.11  Creating a Merchant Wallet
-# ═══════════════════════════════════════════════════════════════════════
 
 @api_view(['POST'])
 def merchant_create(request):
@@ -1307,10 +1271,6 @@ def merchant_activate(request):
         'result': {'contractId': wallet.contract_id}
     })
 
-
-# ═══════════════════════════════════════════════════════════════════════
-# 4.12  Merchant to Merchant
-# ═══════════════════════════════════════════════════════════════════════
 
 @api_view(['POST'])
 def m2m_simulation(request):
@@ -1466,10 +1426,6 @@ def m2m_confirmation(request):
     })
 
 
-# ═══════════════════════════════════════════════════════════════════════
-# 4.13  Dynamic QR Code
-# ═══════════════════════════════════════════════════════════════════════
-
 @api_view(['POST'])
 def dynamic_qr_code(request):
     """POST /wallet/pro/qrcode/dynamic - Generate a dynamic QR code."""
@@ -1517,10 +1473,6 @@ def dynamic_qr_code(request):
         }
     })
 
-
-# ═══════════════════════════════════════════════════════════════════════
-# 4.14  Merchant to Wallet
-# ═══════════════════════════════════════════════════════════════════════
 
 @api_view(['POST'])
 def m2w_simulation(request):
