@@ -8,6 +8,8 @@ RUN pip install requests
 RUN pip install dotenv
 RUN pip install django_rest_framework
 RUN pip install django-cors-headers
+RUN pip install twilio
+RUN pip install django-decouple
 
 WORKDIR /cyclops
 COPY ./core .

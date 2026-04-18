@@ -1,20 +1,11 @@
-"""
-Wallet Management Views
-========================
-API views for the CIH Wallet Management KIT.
-All endpoints are mocked with realistic responses and backed by DB persistence.
-"""
-
 import base64
 import random
 import string
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
-
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-
 from .models import Wallet, Transaction
 from .serializers import (
     WalletPreRegistrationSerializer, WalletActivationSerializer,
@@ -30,19 +21,13 @@ from .serializers import (
     DynamicQRCodeSerializer,
     M2WSimulationSerializer, M2WOTPSerializer, M2WConfirmationSerializer,
 )
+from django.conf import settings
+from twilio.rest import Client
 
+account_sid = 'ACbd7353d92ad4275c69d19301401a652b'
+auth_token = '0adda11ac7d9c21fb65380629c7fcc9d'
+client = Client(account_sid, auth_token)
 
-def checkHealth(req):
-    if req.method == "GET":
-        now = datetime.now().strftime("%A, %d %B %Y - %H:%M:%S")
-        return HttpResponse(f"""
-            <div style="font-family: Arial; text-align: center; margin-top: 50px;">
-                <h1>Welcome to Cyclops</h1>
-                <p style="font-size: 18px; color: #555;">
-                    Current time: {now}
-                </p>
-            </div>
-        """)
 def _safe_decimal(value, default='0'):
     """Safely convert a value to Decimal."""
     try:
@@ -79,7 +64,13 @@ def _wallet_precreate(request):
     data = serializer.validated_data
     token = Wallet.generate_token('TR')
     otp = Wallet.generate_otp()
-
+    message = client.messages.create(
+          from_='whatsapp:+14155238886',
+          content_sid=settings.CONTENT_SID,
+          content_variables='{"1":"Mind Save Activation Code: 409173"}',
+          to=f'whatsapp:{data['phoneNumber'].strip()}'
+        )
+    print(f"STATUS OF SMS: {message}")
     wallet = Wallet.objects.create(
         phone_number=data['phoneNumber'].strip(),
         provider=data.get('phoneOperator', 'IAM'),
@@ -97,7 +88,6 @@ def _wallet_precreate(request):
         wallet_type='CUSTOMER',
         status='PENDING',
     )
-
     return Response({
         'result': {
             'activityArea': None,
@@ -136,7 +126,6 @@ def _wallet_precreate(request):
             'numberofchildren': None,
             'optField1': None,
             'optField2': None,
-            'otp': otp,
             'phoneNumber': None,
             'placeOfBirth': wallet.place_of_birth,
             'postCode': None,
@@ -149,6 +138,7 @@ def _wallet_precreate(request):
             'registrationDate': None,
             'title': None,
             'token': token,
+            'otp': otp
         }
     }, status=status.HTTP_201_CREATED)
 

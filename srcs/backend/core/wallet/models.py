@@ -29,11 +29,11 @@ class Wallet(models.Model):
     ]
 
     # ── Identity ──────────────────────────────────────────────
-    phone_number = models.CharField(max_length=20, db_index=True)
+    phone_number = models.CharField(max_length=20, unique=True, db_index=True)
     provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, default='IAM')
     first_name = models.CharField(max_length=100, blank=True, default='')
     last_name = models.CharField(max_length=100, blank=True, default='')
-    email = models.EmailField(blank=True, default='')
+    email = models.EmailField(blank=True, null=True, unique=True)
 
     # ── Personal Info ─────────────────────────────────────────
     place_of_birth = models.CharField(max_length=100, blank=True, default='')
@@ -52,7 +52,7 @@ class Wallet(models.Model):
 
     # ── Identification ────────────────────────────────────────
     legal_type = models.CharField(max_length=20, blank=True, default='')
-    legal_id = models.CharField(max_length=50, blank=True, default='')
+    legal_id = models.CharField(max_length=50, blank=True, null=True, unique=True)
     document_expiry_date = models.CharField(max_length=20, blank=True, null=True)
 
     # ── Wallet Details ────────────────────────────────────────
