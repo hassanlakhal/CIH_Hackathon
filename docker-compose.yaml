@@ -8,7 +8,11 @@ services:
     init: true
     networks:
       - netone
-      
+    volumes:
+      #For Project
+      - ./srcs/backend/core/core:/cyclops/core
+      - ./srcs/backend/core/wallet:/cyclops/wallet
+
   nginx:
       container_name: nginx
       build: ./srcs/nginx
@@ -25,4 +29,3 @@ services:
 networks:
     netone:
       name: the_network
-    
