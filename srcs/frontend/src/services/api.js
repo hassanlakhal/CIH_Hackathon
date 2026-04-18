@@ -4,7 +4,7 @@
  */
 
 export const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || 'https://placeholder-api.aura.local';
+  import.meta.env.VITE_API_BASE_URL;
 
 /**
  * Build a URL with query parameters.
