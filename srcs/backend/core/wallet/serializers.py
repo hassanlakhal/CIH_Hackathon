@@ -321,7 +321,6 @@ class M2WConfirmationSerializer(serializers.Serializer):
 # ═══════════════════════════════════════════════════════════════
 
 class UserSurveyPostSerializer(serializers.Serializer):
-    phoneNumber = serializers.CharField(max_length=20)
     digitalPlatforms = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)
     rent = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)
     groceries = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)
