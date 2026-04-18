@@ -25,13 +25,20 @@ import {
  * @returns {Promise<object>} Combined dashboard view data.
  */
 export async function getDashboardView(contractId) {
-  const [balanceRes, operationsRes, settingsRes, predictionsRes] =
+  const [operationsRes, settingsRes, predictionsRes] =
     await Promise.all([
-      getWalletBalance(contractId),
-      getWalletOperations(contractId),
+      getWalletOperations(contractId).catch(() => null),
       mockGetAuraSettings(),
       mockGetPredictedExpenses(),
     ]);
+
+  let balanceRes = null;
+  try {
+    // Attempt to hit the real endpoint using the inherited contractId
+    balanceRes = await getWalletBalance(contractId);
+  } catch (err) {
+    console.warn('Real balance failed to fetch inside auraService view logic:', err);
+  }
 
   const balance = transformBalanceForUI(balanceRes);
   const operations = transformOperationsForUI(operationsRes);

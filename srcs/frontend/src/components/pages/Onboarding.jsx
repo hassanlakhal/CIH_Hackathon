@@ -130,7 +130,7 @@ const FIELD_SECTIONS = [
 
 // ─── Build initial form state from field definitions ────────
 function buildInitialState() {
-  const state = {};
+  const state = { countryCode: '212' };
   FIELD_SECTIONS.forEach((section) =>
     section.fields.forEach((f) => {
       state[f.name] = '';
@@ -152,9 +152,9 @@ function validate(form) {
     })
   );
 
-  // Phone format
-  if (form.phoneNumber && !/^\d{9,15}$/.test(form.phoneNumber.trim())) {
-    errors.phoneNumber = 'Enter a valid phone number (digits only, 9–15 characters)';
+  // Phone format (9 digits for local portion)
+  if (form.phoneNumber && !/^\d{9}$/.test(form.phoneNumber.trim())) {
+    errors.phoneNumber = 'Enter a valid 9-digit phone number';
   }
 
   // Email format
@@ -306,7 +306,7 @@ export default function Onboarding() {
 
     // Build payload with official field names
     const payload = {
-      phoneNumber: form.phoneNumber.trim(),
+      phoneNumber: '+' + form.countryCode + form.phoneNumber.trim(),
       phoneOperator: form.phoneOperator,
       clientFirstName: form.clientFirstName.trim(),
       clientLastName: form.clientLastName.trim(),
@@ -423,17 +423,65 @@ export default function Onboarding() {
             <div key={section.title} className={sIdx > 0 ? 'mt-7' : ''}>
               <h2 className="section-title mb-4">{section.title}</h2>
               <div className="card p-4 space-y-4">
-                {section.fields.map((field) => (
-                  <FormField
-                    key={field.name}
-                    field={field}
-                    value={form[field.name]}
-                    error={errors[field.name]}
-                    touched={touched[field.name]}
-                    onChange={handleChange}
-                    onBlur={handleBlur}
-                  />
-                ))}
+                {section.fields.map((field) => {
+                  if (field.name === 'phoneNumber') {
+                    return (
+                      <div key={field.name}>
+                        <label className="block text-sm font-medium text-surface-700 mb-1.5">
+                          {field.label} <span className="text-danger-400 ml-0.5">*</span>
+                        </label>
+                        <div className="flex gap-2">
+                          <select
+                            name="countryCode"
+                            value={form.countryCode}
+                            onChange={handleChange}
+                            className="w-[110px] px-3.5 py-2.5 text-sm rounded-xl border bg-white outline-none border-surface-200 text-surface-900 focus:ring-2 focus:ring-aura-500/20 focus:border-aura-500"
+                          >
+                            <option value="212">+212 (MA)</option>
+                            <option value="33">+33 (FR)</option>
+                            <option value="1">+1 (US/CA)</option>
+                            <option value="44">+44 (UK)</option>
+                            <option value="34">+34 (ES)</option>
+                            <option value="971">+971 (AE)</option>
+                          </select>
+                          <div className="flex-1">
+                            <input
+                              name="phoneNumber"
+                              type="tel"
+                              value={form.phoneNumber}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/\D/g, '');
+                                handleChange({ target: { name: 'phoneNumber', value: val } });
+                              }}
+                              onBlur={handleBlur}
+                              placeholder="612345678"
+                              maxLength={9}
+                              autoComplete="tel-national"
+                              className={`w-full px-3.5 py-2.5 text-sm rounded-xl border bg-white outline-none transition-all duration-200 placeholder:text-surface-300 focus:ring-2 focus:ring-aura-500/20 focus:border-aura-500 ${errors.phoneNumber && touched.phoneNumber ? 'border-danger-400 bg-danger-50/30' : 'border-surface-200 hover:border-surface-300'} text-surface-900`}
+                            />
+                          </div>
+                        </div>
+                        {errors.phoneNumber && touched.phoneNumber && (
+                          <p className="mt-1 text-xs text-danger-500 flex items-center gap-1">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            {errors.phoneNumber}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  }
+                  return (
+                    <FormField
+                      key={field.name}
+                      field={field}
+                      value={form[field.name]}
+                      error={errors[field.name]}
+                      touched={touched[field.name]}
+                      onChange={handleChange}
+                      onBlur={handleBlur}
+                    />
+                  );
+                })}
               </div>
             </div>
           ))}

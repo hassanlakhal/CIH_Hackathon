@@ -44,7 +44,34 @@ export async function apiGet(path, params = {}) {
   });
 
   if (!response.ok) {
-    const error = new Error(`GET ${path} failed: ${response.status}`);
+    let errorMsg = `GET ${path} failed: ${response.status}`;
+    try {
+      const rawText = await response.text();
+      try {
+        const errBody = JSON.parse(rawText);
+        
+        // Priority fields commonly used by APIs
+        if (errBody.message) errorMsg = errBody.message;
+        else if (errBody.error) errorMsg = errBody.error;
+        else if (errBody.detail) errorMsg = errBody.detail;
+        else if (typeof errBody === 'object' && errBody !== null) {
+          // e.g. Django {"otp": ["Invalid OTP"]}
+          const values = Object.values(errBody).flat();
+          if (values.length > 0 && typeof values[0] === 'string') {
+            errorMsg = values.join(', ');
+          } else {
+            errorMsg = rawText;
+          }
+        } else {
+          errorMsg = rawText;
+        }
+      } catch {
+        if (rawText) errorMsg = rawText;
+      }
+    } catch (e) {
+      // Ignore
+    }
+    const error = new Error(errorMsg);
     error.status = response.status;
     throw error;
   }
@@ -72,7 +99,32 @@ export async function apiPost(path, body = {}, params = {}) {
   });
 
   if (!response.ok) {
-    const error = new Error(`POST ${path} failed: ${response.status}`);
+    let errorMsg = `POST ${path} failed: ${response.status}`;
+    try {
+      const rawText = await response.text();
+      try {
+        const errBody = JSON.parse(rawText);
+        
+        if (errBody.message) errorMsg = errBody.message;
+        else if (errBody.error) errorMsg = errBody.error;
+        else if (errBody.detail) errorMsg = errBody.detail;
+        else if (typeof errBody === 'object' && errBody !== null) {
+          const values = Object.values(errBody).flat();
+          if (values.length > 0 && typeof values[0] === 'string') {
+            errorMsg = values.join(', ');
+          } else {
+            errorMsg = rawText;
+          }
+        } else {
+          errorMsg = rawText;
+        }
+      } catch {
+        if (rawText) errorMsg = rawText;
+      }
+    } catch (e) {
+      // Ignore
+    }
+    const error = new Error(errorMsg);
     error.status = response.status;
     throw error;
   }

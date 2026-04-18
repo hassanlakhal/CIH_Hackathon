@@ -48,14 +48,14 @@ async function withFallback(apiFn, mockFn) {
 // state is a query parameter, NOT in the body.
 export function precreateWallet(payload) {
   // Bypassing mocks: hitting real backend directly
-  return apiPost('/wallet', payload, { state: 'precreate' });
+  return apiPost('/wallet/', payload, { state: 'precreate' });
 }
 
 // ─── POST /wallet?state=activate ─────────────────────────────
 // Body contains { token, otp }
 export function activateWallet(payload) {
   // Bypassing mocks: hitting real backend directly
-  return apiPost('/wallet', payload, { state: 'activate' });
+  return apiPost('/wallet/', payload, { state: 'activate' });
 }
 
 // ─── POST /wallet/clientinfo ────────────────────────────────
@@ -76,10 +76,8 @@ export function getWalletOperations(contractid) {
 
 // ─── GET /wallet/balance?contractid=... ─────────────────────
 export function getWalletBalance(contractid) {
-  return withFallback(
-    () => apiGet('/wallet/balance', { contractid }),
-    () => mockGetWalletBalance(contractid)
-  );
+  // Bypassing mocks: hitting real backend directly
+  return apiGet('/wallet/balance', { contractid });
 }
 
 // ─── POST /wallet/transfer/virement?step=simulation ────────

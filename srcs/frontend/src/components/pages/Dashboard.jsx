@@ -2,8 +2,10 @@
  * Dashboard — main landing page showing savings summary,
  * goal progress, predicted expenses, and recent invisible moves.
  */
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDashboardData } from '../../hooks/useDashboardData.js';
+import { getWalletBalance } from '../../services/walletService.js';
 import { formatCurrency, formatCurrencyCompact } from '../../utils/formatCurrency.js';
 import { formatRelativeTime, formatDate } from '../../utils/formatDate.js';
 import StatCard from '../ui/StatCard.jsx';
@@ -15,6 +17,39 @@ import PrimaryButton from '../ui/PrimaryButton.jsx';
 export default function Dashboard() {
   const { data, loading, error, refetch } = useDashboardData();
   const navigate = useNavigate();
+
+  const [realBalance, setRealBalance] = useState(null);
+  const [balanceLoading, setBalanceLoading] = useState(true);
+  const [balanceError, setBalanceError] = useState(null);
+
+  useEffect(() => {
+    const cid = localStorage.getItem('aura_contract_id');
+    if (!cid) {
+      setBalanceError('Activate wallet');
+      setBalanceLoading(false);
+      return;
+    }
+    
+    setBalanceLoading(true);
+    setBalanceError(null);
+    getWalletBalance(cid)
+      .then(res => {
+        if (res?.result?.balance?.[0]?.value) {
+          const rawValue = res.result.balance[0].value;
+          const numericVal = parseFloat(rawValue.replace(',', '.'));
+          setRealBalance(numericVal);
+        } else {
+          setBalanceError('Unavailable');
+        }
+      })
+      .catch((err) => {
+        // Soft fallback UI string
+        setBalanceError('Disconnected');
+      })
+      .finally(() => {
+        setBalanceLoading(false);
+      });
+  }, []);
 
   if (loading) {
     return <LoadingState message="Preparing your dashboard…" />;
@@ -85,11 +120,25 @@ export default function Dashboard() {
 
       {/* ─── Top summary grid ─────────────────────────── */}
       <div className="grid grid-cols-2 gap-3">
-        <StatCard
-          label="Current Balance"
-          value={formatCurrency(metrics.currentBalance)}
-          icon="💳"
-        />
+        <div className="card p-4 space-y-1 relative border border-surface-200">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs font-semibold text-surface-500 uppercase tracking-widest">
+              Current Balance
+            </p>
+            <span className="text-lg">💳</span>
+          </div>
+          {balanceLoading ? (
+            <div className="h-7 w-24 bg-surface-200 animate-pulse rounded mt-1" />
+          ) : balanceError ? (
+            <p className="text-xs text-danger-500 font-medium leading-tight mt-1">
+              {balanceError}
+            </p>
+          ) : (
+            <p className="text-2xl font-black text-surface-900 tracking-tight mt-1">
+              {formatCurrency(realBalance ?? 0)}
+            </p>
+          )}
+        </div>
         <StatCard
           label="Safety Floor"
           value={formatCurrency(metrics.safetyFloor)}
