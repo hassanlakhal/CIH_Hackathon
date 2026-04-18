@@ -6,7 +6,7 @@ from datetime import datetime
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .models import Wallet, Transaction
+from .models import Wallet, Transaction, userSurvey
 from .serializers import (
     WalletPreRegistrationSerializer, WalletActivationSerializer,
     ClientInfoSerializer,
@@ -1583,12 +1583,12 @@ def survey_view(request):
     GET /wallet/survey?phoneNumber=X - Get user survey needs
     """
     if request.method == 'POST':
+        token = request.data.get('token')
         serializer = UserSurveyPostSerializer(data=request.data)
         if not serializer.is_valid():
             return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
         
         data = serializer.validated_data
-        token = data['token'].strip()
         
         try:
             wallet = Wallet.objects.get(token=token)
@@ -1611,9 +1611,9 @@ def survey_view(request):
         return Response({'message': 'Survey submitted successfully.'}, status=status.HTTP_201_CREATED)
 
     elif request.method == 'GET':
-        phone = request.query_params.get('phoneNumber', '').strip()
+        phone = request.query_params.get('token')
         if not phone:
-            return Response({'error': 'phoneNumber query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'error': 'token query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
             
         try:
             wallet = Wallet.objects.get(phone_number=phone)
