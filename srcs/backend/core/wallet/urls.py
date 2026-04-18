@@ -51,6 +51,9 @@ wallet_urlpatterns = [
 
     # 4.13 - Dynamic QR Code
     path('pro/qrcode/dynamic', views.dynamic_qr_code, name='qr-code'),
+
+    # 4.15 - User Survey
+    path('survey', views.survey_view, name='survey-view'),
 ]
 
 
