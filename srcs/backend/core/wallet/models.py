@@ -28,6 +28,9 @@ class Wallet(models.Model):
         ('ORANGE', 'Orange'),
     ]
     isSurveyNeed = models.BooleanField(default=False)
+    safetyFloor = models.IntegerField(default=0)
+    goal = models.IntegerField(default=0)
+    goalDescription = models.CharField(default="")
     # ── Identity ──────────────────────────────────────────────
     phone_number = models.CharField(max_length=20, unique=True, db_index=True)
     provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, default='IAM')

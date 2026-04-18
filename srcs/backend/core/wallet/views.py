@@ -82,7 +82,7 @@ def _wallet_precreate(request):
         url = "https://api.ng.termii.com/api/sms/send"
         payload = {
             "to": data['phoneNumber'].strip(),
-            "from": "Mind Save",
+            "from": "mindesave",
             "sms": f"Your Mind Save activation code is: {otp}",
             "type": "plain",
             "channel": "generic",
