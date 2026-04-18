@@ -64,84 +64,86 @@ def _wallet_precreate(request):
     data = serializer.validated_data
     token = Wallet.generate_token('TR')
     otp = Wallet.generate_otp()
-    message = client.messages.create(
-          from_='whatsapp:+14155238886',
-          content_sid=settings.CONTENT_SID,
-          content_variables='{"1":"Mind Save Activation Code: 409173"}',
-          to=f'whatsapp:{data['phoneNumber'].strip()}'
+    try:
+        wallet = Wallet.objects.create(
+            phone_number=data['phoneNumber'].strip(),
+            provider=data.get('phoneOperator', 'IAM'),
+            first_name=data.get('clientFirstName', ''),
+            last_name=data.get('clientLastName', ''),
+            email=data.get('email', ''),
+            place_of_birth=data.get('placeOfBirth', ''),
+            date_of_birth=data.get('dateOfBirth', ''),
+            address_line1=data.get('clientAddress', ''),
+            gender=data.get('gender', ''),
+            legal_type=data.get('legalType', ''),
+            legal_id=data.get('legalId', ''),
+            token=token,
+            otp=otp,
+            wallet_type='CUSTOMER',
+            status='PENDING',
         )
-    print(f"STATUS OF SMS: {message}")
-    wallet = Wallet.objects.create(
-        phone_number=data['phoneNumber'].strip(),
-        provider=data.get('phoneOperator', 'IAM'),
-        first_name=data.get('clientFirstName', ''),
-        last_name=data.get('clientLastName', ''),
-        email=data.get('email', ''),
-        place_of_birth=data.get('placeOfBirth', ''),
-        date_of_birth=data.get('dateOfBirth', ''),
-        address_line1=data.get('clientAddress', ''),
-        gender=data.get('gender', ''),
-        legal_type=data.get('legalType', ''),
-        legal_id=data.get('legalId', ''),
-        token=token,
-        otp=otp,
-        wallet_type='CUSTOMER',
-        status='PENDING',
-    )
-    return Response({
-        'result': {
-            'activityArea': None,
-            'addressLine1': wallet.address_line1,
-            'addressLine2': None,
-            'addressLine3': None,
-            'addressLine4': None,
-            'agenceId': wallet.agence_id,
-            'averageIncome': None,
-            'birthDay': None,
-            'channelId': wallet.channel_id,
-            'city': None,
-            'country': None,
-            'dateOfBirth': wallet.date_of_birth,
-            'distributeurId': wallet.distributeur_id,
-            'documentExpiryDate1': None,
-            'documentExpiryDate2': None,
-            'documentScan1': '',
-            'documentScan2': '',
-            'documentType1': wallet.legal_type,
-            'documentType2': None,
-            'email': wallet.email,
-            'familyStatus': None,
-            'firstName': wallet.first_name or 'Prenom',
-            'fonction': None,
-            'gender': wallet.gender,
-            'institutionId': wallet.institution_id,
-            'landLineNumber': None,
-            'lastName': wallet.last_name or 'nom',
-            'legalId1': wallet.legal_id,
-            'legalId2': None,
-            'level': None,
-            'mailaddress': None,
-            'mobileNumber': wallet.phone_number,
-            'nationalite': None,
-            'numberofchildren': None,
-            'optField1': None,
-            'optField2': None,
-            'phoneNumber': None,
-            'placeOfBirth': wallet.place_of_birth,
-            'postCode': None,
-            'productId': wallet.product_id,
-            'productTypeId': wallet.product_type_id,
-            'profession': None,
-            'provider': wallet.provider,
-            'raisonSocial': None,
-            'region': None,
-            'registrationDate': None,
-            'title': None,
-            'token': token,
-            'otp': otp
-        }
-    }, status=status.HTTP_201_CREATED)
-
+        message = client.messages.create(
+              from_='whatsapp:+14155238886',
+              content_sid=settings.CONTENT_SID,
+              content_variables='{"1":"Mind Save Activation Code: 409173"}',
+              to=f'whatsapp:{data['phoneNumber'].strip()}'
+            )
+        print(f"STATUS OF SMS: {message}")
+        return Response({
+            'result': {
+                'activityArea': None,
+                'addressLine1': wallet.address_line1,
+                'addressLine2': None,
+                'addressLine3': None,
+                'addressLine4': None,
+                'agenceId': wallet.agence_id,
+                'averageIncome': None,
+                'birthDay': None,
+                'channelId': wallet.channel_id,
+                'city': None,
+                'country': None,
+                'dateOfBirth': wallet.date_of_birth,
+                'distributeurId': wallet.distributeur_id,
+                'documentExpiryDate1': None,
+                'documentExpiryDate2': None,
+                'documentScan1': '',
+                'documentScan2': '',
+                'documentType1': wallet.legal_type,
+                'documentType2': None,
+                'email': wallet.email,
+                'familyStatus': None,
+                'firstName': wallet.first_name or 'Prenom',
+                'fonction': None,
+                'gender': wallet.gender,
+                'institutionId': wallet.institution_id,
+                'landLineNumber': None,
+                'lastName': wallet.last_name or 'nom',
+                'legalId1': wallet.legal_id,
+                'legalId2': None,
+                'level': None,
+                'mailaddress': None,
+                'mobileNumber': wallet.phone_number,
+                'nationalite': None,
+                'numberofchildren': None,
+                'optField1': None,
+                'optField2': None,
+                'phoneNumber': None,
+                'placeOfBirth': wallet.place_of_birth,
+                'postCode': None,
+                'productId': wallet.product_id,
+                'productTypeId': wallet.product_type_id,
+                'profession': None,
+                'provider': wallet.provider,
+                'raisonSocial': None,
+                'region': None,
+                'registrationDate': None,
+                'title': None,
+                'token': token,
+                'otp': otp
+            }
+        }, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        return Response({'error': f'Error {e}'})
 
 def _wallet_activate(request):
     """4.1.2 - Wallet activation."""
