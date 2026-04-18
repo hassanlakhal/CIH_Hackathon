@@ -1417,6 +1417,16 @@ def m2m_confirmation(request):
         }
     })
 
+@api_view(['POST'])
+def checkcheck(request):
+    token = request.data.get('token')
+    try:
+        Wallet.objects.get(token=token)
+        return Response(status=status.HTTP_200_OK)
+    except:
+        return Response(status=status.HTTP_400_BAD_REQUEST)
+
+
 
 @api_view(['POST'])
 def dynamic_qr_code(request):
