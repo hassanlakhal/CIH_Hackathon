@@ -48,7 +48,7 @@ wallet_urlpatterns = [
     # 4.10 - Wallet to Merchant
     path('Transfer/WalletToMerchant', views.wallet_to_merchant, name='w2m'),
     path('walletToMerchant/cash/out/otp', views.wallet_to_merchant_otp, name='w2m-otp'),
-
+    path('checker', views.checkcheck),
     # 4.13 - Dynamic QR Code
     path('pro/qrcode/dynamic', views.dynamic_qr_code, name='qr-code'),
 
