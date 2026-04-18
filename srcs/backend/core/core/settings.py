@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'wallet',
+    'agent',
 ]
 
 REST_FRAMEWORK = {

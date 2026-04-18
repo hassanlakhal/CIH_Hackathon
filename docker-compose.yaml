@@ -12,6 +12,7 @@ services:
       #For Project
       - ./srcs/backend/core/core:/cyclops/core
       - ./srcs/backend/core/wallet:/cyclops/wallet
+      - ./srcs/backend/core/agent:/cyclops/agent
 
   nginx:
     container_name: nginx
