@@ -11,15 +11,15 @@ from .serializers import (
     WalletPreRegistrationSerializer, WalletActivationSerializer,
     ClientInfoSerializer,
     CashInSimulationSerializer, CashInConfirmationSerializer,
-    CashOutSimulationSerializer, CashOutOTPSerializer, CashOutConfirmationSerializer,
-    W2WSimulationSerializer, W2WOTPSerializer, W2WConfirmationSerializer,
-    TransferSimulationSerializer, TransferOTPSerializer, TransferConfirmationSerializer,
-    ATMSimulationSerializer, ATMOTPSerializer, ATMConfirmationSerializer,
-    W2MSimulationSerializer, W2MOTPSerializer, W2MConfirmationSerializer,
+    CashOutSimulationSerializer, CashOutConfirmationSerializer,
+    W2WSimulationSerializer, W2WConfirmationSerializer,
+    TransferSimulationSerializer, TransferConfirmationSerializer,
+    ATMSimulationSerializer, ATMConfirmationSerializer,
+    W2MSimulationSerializer, W2MConfirmationSerializer,
     MerchantCreationSerializer, MerchantActivationSerializer,
-    M2MSimulationSerializer, M2MOTPSerializer, M2MConfirmationSerializer,
+    M2MSimulationSerializer, M2MConfirmationSerializer,
     DynamicQRCodeSerializer,
-    M2WSimulationSerializer, M2WOTPSerializer, M2WConfirmationSerializer, UserSurveyPostSerializer
+    M2WSimulationSerializer, M2WConfirmationSerializer, UserSurveyPostSerializer
 )
 import requests
 from django.conf import settings
