@@ -16,7 +16,7 @@ function ToggleRow({ label, description, checked, onChange }) {
       <button
         onClick={() => onChange(!checked)}
         className={`relative w-12 h-6 rounded-full transition-colors duration-200 flex-shrink-0 ${
-          checked ? 'bg-aura-800' : 'bg-surface-200'
+          checked ? 'bg-primary-800' : 'bg-surface-200'
         }`}
       >
         <span
@@ -38,7 +38,7 @@ function NumberInputRow({ label, value, onChange, unit = 'MAD' }) {
           type="number"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="w-full bg-surface-50 border border-surface-200 rounded-lg py-1.5 pl-3 pr-10 text-right text-sm font-bold text-aura-800 focus:outline-none focus:ring-2 focus:ring-aura-500 transition-shadow appearance-none"
+          className="w-full bg-surface-50 border border-surface-200 rounded-lg py-1.5 pl-3 pr-10 text-right text-sm font-bold text-primary-800 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-shadow appearance-none"
         />
         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-surface-400">
           {unit}
@@ -169,7 +169,7 @@ export default function Settings() {
             <span className="font-bold text-surface-900">Smart Decisions: </span>
             Using your transaction history, Aura detects standard spending routines. If an upcoming expense (like rent) is near, Aura suppresses moves.
           </div>
-          <div className="flex items-start gap-2 bg-aura-50 p-3 rounded-lg border border-aura-100 text-aura-800">
+          <div className="flex items-start gap-2 bg-primary-50 p-3 rounded-lg border border-primary-100 text-primary-800">
             <span className="text-lg">🧪</span>
             <span className="text-xs font-bold leading-relaxed">
               Current transfers are operating in "simulation-first mode". Aura tracks decisions, but no real money moves until final integration.

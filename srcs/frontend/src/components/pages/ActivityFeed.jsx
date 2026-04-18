@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useActivityFeed } from '../../hooks/useActivityFeed.js';
 import { formatCurrency } from '../../utils/formatCurrency.js';
 import { formatRelativeTime } from '../../utils/formatDate.js';
@@ -8,8 +9,8 @@ import StatusBadge from '../ui/StatusBadge.jsx';
 import TransferModal from '../ui/TransferModal.jsx';
 
 const CATEGORY_CONFIG = {
-  aura_save: { icon: '🌀', bg: 'bg-aura-50 text-aura-600', label: 'Aura Savings' },
-  invisible_move: { icon: '🌀', bg: 'bg-aura-50 text-aura-600', label: 'Invisible Move' },
+  aura_save: { icon: '🌀', bg: 'bg-primary-50 text-primary', label: 'Aura Savings' },
+  invisible_move: { icon: '🌀', bg: 'bg-primary-50 text-primary', label: 'Invisible Move' },
   income: { icon: '💰', bg: 'bg-success-50 text-success-600', label: 'Income' },
   shopping: { icon: '🛍️', bg: 'bg-warning-50 text-warning-600', label: 'Shopping' },
   housing: { icon: '🏠', bg: 'bg-blue-50 text-blue-600', label: 'Housing' },
@@ -19,7 +20,8 @@ const CATEGORY_CONFIG = {
 };
 
 export default function ActivityFeed() {
-  const { walletOps, auraMoves, loading, error, refetch } = useActivityFeed();
+  const { walletOps, auraMoves, loading, error, noContract, refetch } = useActivityFeed();
+  const navigate = useNavigate();
   const [tab, setTab] = useState('all'); // 'all' | 'wallet' | 'aura'
   const [filterStatus, setFilterStatus] = useState('all'); // 'all' | 'completed' | 'simulated' | 'skipped'
   
@@ -45,6 +47,20 @@ export default function ActivityFeed() {
 
   if (loading) {
     return <LoadingState message="Loading activity..." />;
+  }
+
+  if (noContract) {
+    return (
+      <div className="px-5 py-12">
+        <EmptyState
+          icon="🪪"
+          title="Wallet not activated yet"
+          message="Complete onboarding to view your activity."
+          actionLabel="Set up wallet"
+          onAction={() => navigate('/onboarding')}
+        />
+      </div>
+    );
   }
 
   if (error) {
@@ -103,7 +119,7 @@ export default function ActivityFeed() {
               onClick={() => setFilterStatus(f.id)}
               className={`whitespace-nowrap px-3.5 py-1.5 text-xs font-medium rounded-full border transition-all ${
                 filterStatus === f.id
-                  ? 'bg-aura-800 border-aura-800 text-white shadow-sm'
+                  ? 'bg-primary-dark border-primary-dark text-white shadow-sm'
                   : 'bg-white border-surface-200 text-surface-600 hover:bg-surface-50'
               }`}
             >
@@ -188,7 +204,7 @@ function AuraDecisionCard({ move, onExecute }) {
     icon = "⚠️";
     badgeVariant = "failed";
   } else if (move.status === 'simulated') {
-    bgClass = "bg-aura-50/50 border-aura-100";
+    bgClass = "bg-primary-50/50 border-primary-100";
     icon = "🧠";
     badgeVariant = "pending";
   } else if (move.status === 'completed') {
@@ -233,7 +249,7 @@ function AuraDecisionCard({ move, onExecute }) {
         {move.status === 'simulated' && onExecute && (
           <button 
             onClick={onExecute}
-            className="px-3 py-1.5 bg-aura-800 text-white text-xs font-bold rounded-lg shadow-sm hover:bg-aura-900 transition-colors"
+            className="px-3 py-1.5 bg-primary-dark text-white text-xs font-bold rounded-lg shadow-sm hover:brightness-110 transition-all text-center"
           >
             Execute Transfer
           </button>

@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { precreateWallet } from '../../services/walletService.js';
+import { saveStoredUserIdentity } from '../../utils/userIdentity.js';
 import PrimaryButton from '../ui/PrimaryButton.jsx';
 
 // ─── Field definitions ──────────────────────────────────────
@@ -183,7 +184,7 @@ function FormField({ field, value, error, touched, onChange, onBlur }) {
     w-full px-3.5 py-2.5 text-sm rounded-xl border bg-white
     outline-none transition-all duration-200
     placeholder:text-surface-300
-    focus:ring-2 focus:ring-aura-500/20 focus:border-aura-500
+    focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500
     ${error && touched
       ? 'border-danger-400 bg-danger-50/30'
       : 'border-surface-200 hover:border-surface-300'
@@ -332,6 +333,17 @@ export default function Onboarding() {
         localStorage.setItem('aura_precreate_otp', response.result.otp);
       }
 
+      // Persist identity fields for later use by POST /wallet/clientinfo
+      // Maps: legalType → identificationType, legalId → identificationNumber
+      saveStoredUserIdentity({
+        phoneNumber: payload.phoneNumber,
+        identificationType: form.legalType,
+        identificationNumber: form.legalId.trim(),
+        firstName: form.clientFirstName.trim(),
+        lastName: form.clientLastName.trim(),
+        token: response?.result?.token || '',
+      });
+
       navigate('/wallet-activation');
     } catch (err) {
       console.error('[Onboarding] precreateWallet failed:', err);
@@ -360,18 +372,13 @@ export default function Onboarding() {
       {/* ─── Sticky header ──────────────────────────── */}
       <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-lg border-b border-surface-100">
         <div className="max-w-lg mx-auto px-5 py-3 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-aura-500 to-aura-700 flex items-center justify-center shadow-sm flex-shrink-0">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-white">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
-                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
-          <span className="text-base font-bold text-surface-900 tracking-tight">Aura</span>
+          <img src="/logo.png" alt="MindSave" className="w-10 h-10 rounded-xl object-contain flex-shrink-0" />
+          <span className="text-base font-bold text-surface-900 tracking-tight">MindSave</span>
         </div>
         {/* Progress bar */}
         <div className="h-1 bg-surface-100">
           <div
-            className="h-full bg-gradient-to-r from-aura-500 to-aura-400 transition-all duration-500 ease-out rounded-r-full"
+            className="h-full bg-gradient-primary transition-all duration-500 ease-out rounded-r-full"
             style={{ width: `${progressPct}%` }}
           />
         </div>
@@ -401,7 +408,7 @@ export default function Onboarding() {
           </div>
           <div className="flex items-center gap-1.5 text-xs text-surface-400">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-aura-500">
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary-500">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
               <path d="M7 11V7a5 5 0 0110 0v4" />
             </svg>
@@ -409,7 +416,7 @@ export default function Onboarding() {
           </div>
           <div className="flex items-center gap-1.5 text-xs text-surface-400">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-aura-500">
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary-500">
               <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
               <polyline points="22 4 12 14.01 9 11.01" />
             </svg>
@@ -435,7 +442,7 @@ export default function Onboarding() {
                             name="countryCode"
                             value={form.countryCode}
                             onChange={handleChange}
-                            className="w-[110px] px-3.5 py-2.5 text-sm rounded-xl border bg-white outline-none border-surface-200 text-surface-900 focus:ring-2 focus:ring-aura-500/20 focus:border-aura-500"
+                            className="w-[110px] px-3.5 py-2.5 text-sm rounded-xl border bg-white outline-none border-surface-200 text-surface-900 focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
                           >
                             <option value="212">+212 (MA)</option>
                             <option value="33">+33 (FR)</option>
@@ -457,7 +464,7 @@ export default function Onboarding() {
                               placeholder="612345678"
                               maxLength={9}
                               autoComplete="tel-national"
-                              className={`w-full px-3.5 py-2.5 text-sm rounded-xl border bg-white outline-none transition-all duration-200 placeholder:text-surface-300 focus:ring-2 focus:ring-aura-500/20 focus:border-aura-500 ${errors.phoneNumber && touched.phoneNumber ? 'border-danger-400 bg-danger-50/30' : 'border-surface-200 hover:border-surface-300'} text-surface-900`}
+                              className={`w-full px-3.5 py-2.5 text-sm rounded-xl border bg-white outline-none transition-all duration-200 placeholder:text-surface-300 focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 ${errors.phoneNumber && touched.phoneNumber ? 'border-danger-400 bg-danger-50/30' : 'border-surface-200 hover:border-surface-300'} text-surface-900`}
                             />
                           </div>
                         </div>
@@ -511,9 +518,9 @@ export default function Onboarding() {
             </PrimaryButton>
             <p className="text-center text-xs text-surface-400 mt-3 leading-relaxed">
               By continuing, you agree to Aura&apos;s{' '}
-              <span className="text-aura-600 font-medium">Terms of Service</span>
+              <span className="text-primary-600 font-medium">Terms of Service</span>
               {' '}and{' '}
-              <span className="text-aura-600 font-medium">Privacy Policy</span>.
+              <span className="text-primary-600 font-medium">Privacy Policy</span>.
             </p>
           </div>
         </form>

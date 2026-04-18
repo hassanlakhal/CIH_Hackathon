@@ -5,7 +5,7 @@
  * Keeps official wallet data separate from derived UI data.
  */
 
-import { getWalletBalance, getWalletOperations } from './walletService.js';
+import { getWalletBalance, getWalletOperations } from './transactionService.js';
 import {
   mockGetAuraSettings,
   mockUpdateAuraSettings,

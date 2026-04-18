@@ -20,11 +20,6 @@ import {
   mockPrecreateWallet,
   mockActivateWallet,
   mockGetClientInfo,
-  mockGetWalletOperations,
-  mockGetWalletBalance,
-  mockSimulateBankTransfer,
-  mockSendTransferOtp,
-  mockConfirmBankTransfer,
 } from '../mocks/walletMock.js';
 
 /** Set to true to always use mocks (e.g. demo mode, no backend). */
@@ -59,47 +54,25 @@ export function activateWallet(payload) {
 }
 
 // ─── POST /wallet/clientinfo ────────────────────────────────
+// Body: { phoneNumber, identificationType, identificationNumber }
 export function getClientInfo(payload) {
-  return withFallback(
-    () => apiPost('/wallet/clientinfo', payload),
-    () => mockGetClientInfo(payload)
-  );
-}
-
-// ─── GET /wallet/operations?contractid=... ──────────────────
-export function getWalletOperations(contractid) {
-  return withFallback(
-    () => apiGet('/wallet/operations', { contractid }),
-    () => mockGetWalletOperations(contractid)
-  );
-}
-
-// ─── GET /wallet/balance?contractid=... ─────────────────────
-export function getWalletBalance(contractid) {
   // Bypassing mocks: hitting real backend directly
-  return apiGet('/wallet/balance', { contractid });
+  return apiPost('/wallet/clientinfo', payload);
 }
 
-// ─── POST /wallet/transfer/virement?step=simulation ────────
-export function simulateBankTransfer(payload) {
-  return withFallback(
-    () => apiPost('/wallet/transfer/virement', payload, { step: 'simulation' }),
-    () => mockSimulateBankTransfer(payload)
-  );
+// ─── Survey Endpoints ────────────────────────────────────────────────────────
+
+/**
+ * Fetch survey data and status for a given phone number.
+ */
+export async function getSurvey(phoneNumber) {
+  return await apiGet('/wallet/survey', { phoneNumber });
 }
 
-// ─── POST /wallet/transfer/virement/otp ────────────────────
-export function sendTransferOtp(payload) {
-  return withFallback(
-    () => apiPost('/wallet/transfer/virement/otp', payload),
-    () => mockSendTransferOtp(payload)
-  );
+/**
+ * Submit the complete user onboarding financial survey.
+ */
+export async function submitSurvey(payload) {
+  return await apiPost('/wallet/survey', payload);
 }
 
-// ─── POST /wallet/transfer/virement?step=confirmation ──────
-export function confirmBankTransfer(payload) {
-  return withFallback(
-    () => apiPost('/wallet/transfer/virement', payload, { step: 'confirmation' }),
-    () => mockConfirmBankTransfer(payload)
-  );
-}

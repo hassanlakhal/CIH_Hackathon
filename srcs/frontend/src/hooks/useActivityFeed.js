@@ -1,20 +1,31 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getWalletOperations } from '../services/walletService.js';
+import { getWalletOperations } from '../services/transactionService.js';
 import { getAuraDecisionsFeed } from '../services/auraService.js';
 import { transformOperationsForUI } from '../utils/transformApiData.js';
-
-const DEFAULT_CONTRACT_ID = 'WLT-2026-STU-00142';
+import { getAuraContractId } from '../utils/userIdentity.js';
 
 /**
  * Hook to fetch the full operations activity feed and Aura decisions.
+ * Reads the contract ID from localStorage ('aura_contract_id').
+ * If no contract ID is stored, returns a noContract flag.
  */
-export function useActivityFeed(contractId = DEFAULT_CONTRACT_ID) {
+export function useActivityFeed() {
   const [walletOps, setWalletOps] = useState([]);
   const [auraMoves, setAuraMoves] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [noContract, setNoContract] = useState(false);
+
+  const contractId = getAuraContractId();
 
   const fetchFeed = useCallback(async () => {
+    if (!contractId) {
+      setNoContract(true);
+      setLoading(false);
+      return;
+    }
+
+    setNoContract(false);
     setLoading(true);
     setError(null);
     try {
@@ -36,5 +47,5 @@ export function useActivityFeed(contractId = DEFAULT_CONTRACT_ID) {
     fetchFeed();
   }, [fetchFeed]);
 
-  return { walletOps, auraMoves, loading, error, refetch: fetchFeed };
+  return { walletOps, auraMoves, loading, error, noContract, refetch: fetchFeed };
 }
