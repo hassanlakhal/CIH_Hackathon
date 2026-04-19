@@ -7,8 +7,6 @@ RUN pip install django
 RUN pip install requests
 RUN pip install dotenv
 RUN pip install django_rest_framework
-RUN pip install django-cors-headers
-RUN pip install google-generativeai
 
 WORKDIR /cyclops
 COPY ./core .
