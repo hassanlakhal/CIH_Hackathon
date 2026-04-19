@@ -1,0 +1,85 @@
+{
+  "status": "success",
+  "balance_mad": 5000.0,
+  "financial_summary": {
+    "balance_mad": 5000.0,
+    "total_transactions": 1,
+    "total_debits_mad": 0.0,
+    "total_credits_mad": 0.0,
+    "net_flow_mad": 0.0,
+    "avg_tx_amount_mad": 0.0,
+    "daily_burn_rate_mad": 0.0,
+    "days_of_runway": null,
+    "unique_categories": 1,
+    "analysis_window_days": 1
+  },
+  "upcoming_events": [],
+  "top_categories": [
+    {
+      "category": "Unknown",
+      "total_mad": 0.0
+    }
+  ],
+  "ai_forecast": {
+    "risk_level": "low",
+    "savings_target_per_day_mad": 33.33,
+    "key_insights": [
+      "Your current balance is 5000.0 MAD, providing a solid financial starting point.",
+      "With no recent spending history, your financial profile is a blank slate, offering a great opportunity to set new habits.",
+      "Based on a standard Moroccan spending profile, your estimated daily spending is around 133.33 MAD."
+    ],
+    "forecast_7_days": [
+      {
+        "day": "Monday",
+        "date_offset": 0,
+        "predicted_spend_mad": 133.33,
+        "predicted_category": "Groceries",
+        "confidence": "medium"
+      },
+      {
+        "day": "Tuesday",
+        "date_offset": 1,
+        "predicted_spend_mad": 133.33,
+        "predicted_category": "Transport",
+        "confidence": "medium"
+      },
+      {
+        "day": "Wednesday",
+        "date_offset": 2,
+        "predicted_spend_mad": 133.33,
+        "predicted_category": "Utilities",
+        "confidence": "medium"
+      },
+      {
+        "day": "Thursday",
+        "date_offset": 3,
+        "predicted_spend_mad": 133.33,
+        "predicted_category": "Leisure",
+        "confidence": "medium"
+      },
+      {
+        "day": "Friday",
+        "date_offset": 4,
+        "predicted_spend_mad": 133.33,
+        "predicted_category": "Dining Out",
+        "confidence": "medium"
+      },
+      {
+        "day": "Saturday",
+        "date_offset": 5,
+        "predicted_spend_mad": 133.33,
+        "predicted_category": "Shopping",
+        "confidence": "medium"
+      },
+      {
+        "day": "Sunday",
+        "date_offset": 6,
+        "predicted_spend_mad": 133.33,
+        "predicted_category": "General Spending",
+        "confidence": "medium"
+      }
+    ]
+  },
+  "savings_advice": "With a balance of 5000.0 MAD and no recent spending, you have a great opportunity to establish healthy financial habits. Based on your balance, you can spend approximately 133.33 MAD per day to maintain a healthy financial position while aiming to save 33.33 MAD daily. By consistently tracking your expenses and prioritizing needs, you can build a strong financial future.",
+  "data_errors": []
+}

@@ -49,6 +49,19 @@ wallet_urlpatterns = [
 
     # 4.15 - User Survey
     path('survey', views.survey_view, name='survey-view'),
+
+    # 4.16 - Savings Goals
+    path('goals', views.savings_goal_list_create, name='goal-list-create'),
+    path('goals/<int:pk>', views.savings_goal_detail, name='goal-detail'),
+
+    # 4.17 - AutoSave Rules
+    path('auto-save', views.auto_saving_rule_create, name='auto-save-create'),
+
+    # 4.18 - AI Insights
+    path('insight', views.wallet_insight_trigger, name='wallet-insight'),
+
+    # 4.19 - Health History
+    path('health', views.health_score_history, name='health-history'),
 ]
 
 

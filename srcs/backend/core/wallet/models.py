@@ -242,3 +242,101 @@ class userSurvey(models.Model):
     entertainment = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     transportation = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class SavingsGoal(models.Model):
+    STATUS = [('ACTIVE', 'Active'), ('ACHIEVED', 'Achieved'), ('PAUSED', 'Paused'), ('ABANDONED', 'Abandoned')]
+    PRIORITY = [('HIGH', 'High'), ('MEDIUM', 'Medium'), ('LOW', 'Low')]
+
+    wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='goals')
+    title = models.CharField(max_length=100)          # "Emergency Fund", "New Car"
+    description = models.TextField(blank=True)
+    target_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    current_saved = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    target_date = models.DateField()
+    predicted_completion_date = models.DateField(null=True, blank=True)
+    monthly_needed = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    priority = models.CharField(max_length=10, choices=PRIORITY, default='MEDIUM')
+    status = models.CharField(max_length=10, choices=STATUS, default='ACTIVE')
+    auto_allocate_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0) # % of each income auto-saved
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.title} ({self.wallet.phone_number})"
+
+
+class MonthlySavingRecord(models.Model):
+    wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='monthly_records')
+    goal = models.ForeignKey(SavingsGoal, on_delete=models.SET_NULL, null=True, related_name='records')
+    month = models.DateField()                        # always 1st of month
+    income_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    expense_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    actual_saved = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    target_for_month = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    safety_floor_applied = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    goal_contribution = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    data_source = models.CharField(max_length=50, default="transactions")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class AutoSavingRule(models.Model):
+    RULE_TYPES = [
+        ('ROUND_UP', 'Round Up'),
+        ('PERCENT_INCOME', 'Percent'),
+        ('FIXED_MONTHLY', 'Fixed'),
+    ]
+    wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='auto_rules')
+    goal = models.ForeignKey(SavingsGoal, on_delete=models.SET_NULL, null=True)
+    rule_type = models.CharField(max_length=20, choices=RULE_TYPES)
+    value = models.DecimalField(max_digits=12, decimal_places=2) # %, amount, or round-up increment
+    is_active = models.BooleanField(default=True)
+    total_auto_saved = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class WalletInsight(models.Model):
+    wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='insights')
+    generated_at = models.DateTimeField(auto_now_add=True)
+    month = models.DateField()
+
+    # === AI Response Data ===
+    total_income_last_month = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_expenses_last_month = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    net_savings_last_month = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    savings_rate_pct = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+
+    estimated_income_this_month = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    estimated_expenses_this_month = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    recommended_saving_this_month = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    safety_floor_recommendation = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    predicted_goal_date = models.DateField(null=True)
+    goal_on_track = models.BooleanField(default=True)
+
+    # JSON storage for flexible structures (categorization, opportunities, etc.)
+    income_sources = models.JSONField(default=dict)
+    expense_categories = models.JSONField(default=dict)
+    necessary_expenses = models.JSONField(default=dict)
+    optional_expenses = models.JSONField(default=dict)
+    saving_opportunities = models.JSONField(default=list)
+
+    summary_message = models.TextField()
+    tip = models.TextField()
+    warning = models.TextField(blank=True)
+
+    health_score = models.IntegerField(default=0)
+    health_score_delta = models.IntegerField(default=0)
+
+    raw_ai_response = models.JSONField(default=dict)
+
+
+class FinancialHealthScore(models.Model):
+    wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='health_scores')
+    month = models.DateField()
+    score = models.IntegerField()
+    savings_rate_score = models.IntegerField(default=0)
+    goal_progress_score = models.IntegerField(default=0)
+    stability_score = models.IntegerField(default=0)
+    label = models.CharField(max_length=50) # "Excellent", "Good", etc.
+    created_at = models.DateTimeField(auto_now_add=True)

@@ -1,4 +1,6 @@
 import base64
+import logging
+import os
 import random
 import string
 from decimal import Decimal, InvalidOperation
@@ -6,7 +8,11 @@ from datetime import datetime
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .models import Wallet, Transaction, userSurvey
+from .models import (
+    Wallet, Transaction, userSurvey, 
+    SavingsGoal, MonthlySavingRecord, AutoSavingRule, 
+    WalletInsight, FinancialHealthScore
+)
 from .serializers import (
     WalletPreRegistrationSerializer, WalletActivationSerializer,
     ClientInfoSerializer,
@@ -19,10 +25,14 @@ from .serializers import (
     MerchantCreationSerializer, MerchantActivationSerializer,
     M2MSimulationSerializer, M2MOTPSerializer, M2MConfirmationSerializer,
     DynamicQRCodeSerializer,
-    M2WSimulationSerializer, M2WOTPSerializer, M2WConfirmationSerializer, UserSurveyPostSerializer
+    M2WSimulationSerializer, M2WOTPSerializer, M2WConfirmationSerializer, UserSurveyPostSerializer,
+    SavingsGoalSerializer, AutoSavingRuleSerializer, WalletInsightSerializer
 )
+from agent.intelligence_service import fetch_wallet_data, generate_financial_intelligence
 import requests
 from django.conf import settings
+
+logger = logging.getLogger(__name__)
 
 def _safe_decimal(value, default='0'):
     """Safely convert a value to Decimal."""
@@ -432,6 +442,9 @@ def _cash_in_confirmation(request):
 
     txn.status = 'CONFIRMED'
     txn.save()
+
+    # Trigger AutoSave
+    _trigger_autosave(txn.source_wallet, amount, 'CASH_IN')
 
     return Response({
         'result': {
@@ -1150,6 +1163,9 @@ def _w2m_confirmation(request):
     txn.amount_input_mode = data.get('AmountInputMode', 'ENTERED')
     txn.save()
 
+    # Trigger AutoSave
+    _trigger_autosave(txn.source_wallet, txn.amount, 'W2M')
+
     new_balance = txn.source_wallet.balance if txn.source_wallet else Decimal('0')
 
     return Response({
@@ -1652,3 +1668,275 @@ def survey_view(request):
                 'transportation': float(latest_survey.transportation),
             }
         })
+
+
+# ═══════════════════════════════════════════════════════════════
+# AI Financial Coaching Engine & AutoSave Logic
+# ═══════════════════════════════════════════════════════════════
+
+def _trigger_autosave(wallet, tx_amount, tx_type):
+    """
+    Called after a transaction is confirmed. Applies active AutoSavingRules.
+    """
+    if not wallet:
+        return
+
+    # Find the primary active goal (highest priority)
+    goal = SavingsGoal.objects.filter(wallet=wallet, status='ACTIVE').order_by('-priority', 'created_at').first()
+    if not goal:
+        return
+
+    active_rules = AutoSavingRule.objects.filter(wallet=wallet, goal=goal, is_active=True)
+    
+    for rule in active_rules:
+        saved_amount = Decimal('0.00')
+        
+        if rule.rule_type == 'ROUND_UP' and tx_type == 'W2M':
+            # Round up to the nearest value defined in rule.value (e.g., nearest 10 MAD)
+            increment = rule.value
+            if increment > 0:
+                remainder = tx_amount % increment
+                if remainder > 0:
+                    saved_amount = increment - remainder
+                    
+        elif rule.rule_type == 'PERCENT_INCOME' and tx_type == 'CASH_IN':
+            # rule.value is the percentage (e.g., 5.0 for 5%)
+            saved_amount = (tx_amount * rule.value) / Decimal('100.00')
+            
+        elif rule.rule_type == 'FIXED_MONTHLY' and tx_type == 'CASH_IN':
+            # For simplicity, if it's the first income of the month, save fixed amount
+            saved_amount = rule.value
+
+        if saved_amount > 0:
+            # Transfer from wallet balance to goal
+            if wallet.balance >= saved_amount:
+                wallet.balance -= saved_amount
+                wallet.save()
+                
+                goal.current_saved += saved_amount
+                if goal.current_saved >= goal.target_amount:
+                    goal.status = 'ACHIEVED'
+                goal.save()
+                
+                rule.total_auto_saved += saved_amount
+                rule.save()
+                
+                # Record the micro-contribution
+                from datetime import date
+                MonthlySavingRecord.objects.create(
+                    wallet=wallet,
+                    goal=goal,
+                    month=date(datetime.now().year, datetime.now().month, 1),
+                    goal_contribution=saved_amount,
+                    data_source="autosave"
+                )
+
+
+@api_view(['GET', 'POST'])
+def savings_goal_list_create(request):
+    """
+    GET /wallet/goals?token=X  -> List all goals
+    POST /wallet/goals         -> Create a goal
+    """
+    token = request.query_params.get('token') or request.data.get('token')
+    try:
+        wallet = Wallet.objects.get(token=token)
+    except Wallet.DoesNotExist:
+        return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'POST':
+        serializer = SavingsGoalSerializer(data=request.data)
+        if serializer.is_valid():
+            d = serializer.validated_data
+            goal = SavingsGoal.objects.create(
+                wallet=wallet,
+                title=d['title'],
+                description=d.get('description', ''),
+                target_amount=d['target_amount'],
+                target_date=d['target_date'],
+                priority=d.get('priority', 'MEDIUM')
+            )
+            return Response(SavingsGoalSerializer(goal).data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    goals = SavingsGoal.objects.filter(wallet=wallet)
+    return Response(SavingsGoalSerializer(goals, many=True).data)
+
+
+@api_view(['PATCH'])
+def savings_goal_detail(request, pk):
+    """PATCH /wallet/goals/{id} -> Update goal status/date."""
+    try:
+        goal = SavingsGoal.objects.get(pk=pk)
+    except SavingsGoal.DoesNotExist:
+        return Response({'error': 'Goal not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if 'status' in request.data:
+        goal.status = request.data['status']
+    if 'target_date' in request.data:
+        goal.target_date = request.data['target_date']
+    if 'priority' in request.data:
+        goal.priority = request.data['priority']
+    
+    goal.save()
+    return Response(SavingsGoalSerializer(goal).data)
+
+
+@api_view(['POST'])
+def auto_saving_rule_create(request):
+    """POST /wallet/auto-save -> Create auto-saving configuration."""
+    token = request.data.get('token')
+    try:
+        wallet = Wallet.objects.get(token=token)
+    except Wallet.DoesNotExist:
+        return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    serializer = AutoSavingRuleSerializer(data=request.data)
+    if serializer.is_valid():
+        d = serializer.validated_data
+        goal = None
+        if d.get('goal_id'):
+            goal = SavingsGoal.objects.filter(pk=d['goal_id'], wallet=wallet).first()
+        
+        # If no goal specified, pick the highest priority active one
+        if not goal:
+            goal = SavingsGoal.objects.filter(wallet=wallet, status='ACTIVE').order_by('-priority').first()
+
+        rule = AutoSavingRule.objects.create(
+            wallet=wallet,
+            goal=goal,
+            rule_type=d['rule_type'],
+            value=d['value'],
+            is_active=d.get('is_active', True)
+        )
+        return Response(AutoSavingRuleSerializer(rule).data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST', 'GET'])
+def wallet_insight_trigger(request):
+    """
+    POST /wallet/insight  -> Trigger AI analysis and store results
+    GET /wallet/insight   -> Get latest insight
+    """
+    token = request.query_params.get('token') or request.data.get('token')
+    try:
+        wallet = Wallet.objects.get(token=token)
+    except Wallet.DoesNotExist:
+        return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        insight = WalletInsight.objects.filter(wallet=wallet).order_by('-generated_at').first()
+        if not insight:
+            return Response({'error': 'No insights found.'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(insight.raw_ai_response)
+
+    # ── Trigger AI Analysis (POST) ──────────────────────────────────────────
+    try:
+        # 1. Gather Data
+        from datetime import date
+        
+        base_url = os.getenv("WALLET_API_BASE", "http://backend:8000")
+        wallet_data = fetch_wallet_data(wallet.contract_id, base_url=base_url)
+        
+        # Current Goal
+        primary_goal = SavingsGoal.objects.filter(wallet=wallet, status='ACTIVE').order_by('-priority').first()
+        goal_amount = float(primary_goal.target_amount) if primary_goal else 5000.0
+        current_saved = float(primary_goal.current_saved) if primary_goal else 0.0
+        
+        # 2. Call Intelligence Service
+        ai_result = generate_financial_intelligence(
+            wallet_data=wallet_data,
+            safety_floor=float(wallet.safetyFloor),
+            goal_amount=goal_amount,
+            current_saved=current_saved
+        )
+        
+        # 3. Store Results
+        raw = ai_result.raw_json
+        
+        # Parse predicted goal date if present
+        pred_date_str = raw.get('goalForecast', {}).get('predictedGoalCompletionDate')
+        predicted_goal_date = None
+        if pred_date_str and pred_date_str != "YYYY-MM-DD":
+            try:
+                predicted_goal_date = datetime.strptime(pred_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+
+        insight = WalletInsight.objects.create(
+            wallet=wallet,
+            month=date(datetime.now().year, datetime.now().month, 1),
+            
+            # Historical Analysis
+            total_income_last_month=raw.get('incomeAnalysis', {}).get('totalRecurringIncome', 0),
+            total_expenses_last_month=raw.get('expenseAnalysis', {}).get('totalEstimatedMonthlyExpenses', 0),
+            net_savings_last_month=raw.get('safetyAnalysis', {}).get('estimatedFreeMonthlyAmount', 0),
+            savings_rate_pct=raw.get('savingsRecommendation', {}).get('recommendedSavingsRate', 0),
+            
+            # Forecasts
+            estimated_income_this_month=raw.get('incomeAnalysis', {}).get('estimatedIncomeThisMonth', 0),
+            estimated_expenses_this_month=raw.get('expenseAnalysis', {}).get('estimatedExpensesThisMonth', 0),
+            recommended_saving_this_month=raw.get('savingsRecommendation', {}).get('recommendedSavingsAmountMonthly', 0),
+            safety_floor_recommendation=raw.get('safetyAnalysis', {}).get('safetyFloorRecommendation', 0),
+            predicted_goal_date=predicted_goal_date,
+            goal_on_track=raw.get('goalForecast', {}).get('goalOnTrack', True),
+
+            # JSON Structures
+            income_sources=raw.get('incomeAnalysis', {}).get('incomeSources', {}),
+            expense_categories=raw.get('expenseAnalysis', {}).get('expenseCategories', {}),
+            necessary_expenses=raw.get('expenseAnalysis', {}).get('necessaryExpenses', {}),
+            optional_expenses=raw.get('expenseAnalysis', {}).get('optionalExpenses', {}),
+            saving_opportunities=raw.get('savingOpportunities', []),
+
+            # Messaging
+            summary_message=raw.get('insights', ["Analysis complete."])[0] if raw.get('insights') else "No summary available",
+            tip=raw.get('insights', [""])[1] if len(raw.get('insights', [])) > 1 else "Keep up the good work!",
+            warning=raw.get('warnings', [""])[0] if raw.get('warnings') else "",
+            
+            health_score=raw.get('summary', {}).get('confidenceScore', 0),
+            raw_ai_response=raw
+        )
+        
+        # Store Health Score for sparklines
+        FinancialHealthScore.objects.create(
+            wallet=wallet,
+            month=date(datetime.now().year, datetime.now().month, 1),
+            score=insight.health_score,
+            label=raw.get('summary', {}).get('financialStability', 'medium')
+        )
+        
+        # Update Goal prediction
+        if primary_goal:
+            months = raw.get('goalForecast', {}).get('estimatedMonthsToGoal', 0)
+            if months:
+                from dateutil.relativedelta import relativedelta
+                new_date = (date.today() + relativedelta(months=int(months)))
+                primary_goal.predicted_completion_date = new_date
+                primary_goal.save()
+
+        return Response(raw, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f"Intelligence trigger failed: {str(e)}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+def health_score_history(request):
+    """GET /wallet/health?token=X -> Return daily score history."""
+    token = request.query_params.get('token')
+    try:
+        wallet = Wallet.objects.get(token=token)
+    except Wallet.DoesNotExist:
+        return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    scores = FinancialHealthScore.objects.filter(wallet=wallet).order_by('month')
+    history = []
+    for s in scores:
+        history.append({
+            'month': s.month.strftime('%Y-%m'),
+            'score': s.score,
+            'label': s.label
+        })
+    return Response({'history': history})

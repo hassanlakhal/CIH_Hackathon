@@ -8,5 +8,4 @@ urlpatterns = [
     path('api/wallet/',    include(wallet_urlpatterns)),
     path('api/merchant/',  include(merchant_urlpatterns)),
     path('api/merchants',  wallet_views.merchant_create, name='merchant-create'),
-    path('api/agent/',     include('agent.urls')),
 ]

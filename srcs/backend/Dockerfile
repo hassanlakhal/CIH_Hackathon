@@ -9,7 +9,7 @@ RUN pip install python-dotenv
 RUN pip install djangorestframework
 RUN pip install django-cors-headers
 RUN pip install pandas
-RUN pip install google-genai
+RUN pip install groq
 
 WORKDIR /cyclops
 COPY ./core .

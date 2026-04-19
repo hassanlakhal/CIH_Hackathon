@@ -284,3 +284,60 @@ class UserSurveyPostSerializer(serializers.Serializer):
     utilities = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)
     entertainment = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)
     transportation = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)
+
+
+# ═══════════════════════════════════════════════════════════════
+# Missing OTP Serializers
+# ═══════════════════════════════════════════════════════════════
+
+class CashOutOTPSerializer(serializers.Serializer):
+    phoneNumber = serializers.CharField(max_length=20)
+
+class W2WOTPSerializer(serializers.Serializer):
+    phoneNumber = serializers.CharField(max_length=20)
+
+class TransferOTPSerializer(serializers.Serializer):
+    PhoneNumber = serializers.CharField(max_length=20)
+
+class ATMOTPSerializer(serializers.Serializer):
+    PhoneNumber = serializers.CharField(max_length=20)
+
+class W2MOTPSerializer(serializers.Serializer):
+    PhoneNumber = serializers.CharField(max_length=20)
+
+class M2MOTPSerializer(serializers.Serializer):
+    MobileNumber = serializers.CharField(max_length=20)
+
+class M2WOTPSerializer(serializers.Serializer):
+    PhoneNumber = serializers.CharField(max_length=20)
+
+
+# ═══════════════════════════════════════════════════════════════
+# coaching Engine Serializers
+# ═══════════════════════════════════════════════════════════════
+
+class SavingsGoalSerializer(serializers.Serializer):
+    title = serializers.CharField(max_length=100)
+    description = serializers.CharField(required=False, allow_blank=True)
+    target_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    target_date = serializers.DateField()
+    priority = serializers.ChoiceField(choices=[('HIGH', 'High'), ('MEDIUM', 'Medium'), ('LOW', 'Low')], default='MEDIUM')
+    auto_allocate_pct = serializers.DecimalField(max_digits=5, decimal_places=2, default=0)
+
+class AutoSavingRuleSerializer(serializers.Serializer):
+    goal_id = serializers.IntegerField(required=False)
+    rule_type = serializers.ChoiceField(choices=[('ROUND_UP', 'Round Up'), ('PERCENT_INCOME', 'Percent'), ('FIXED_MONTHLY', 'Fixed')])
+    value = serializers.DecimalField(max_digits=12, decimal_places=2)
+    is_active = serializers.BooleanField(default=True)
+
+class WalletInsightSerializer(serializers.Serializer):
+    # This will be used to display insights
+    month = serializers.DateField()
+    total_income_last_month = serializers.DecimalField(max_digits=12, decimal_places=2)
+    total_expenses_last_month = serializers.DecimalField(max_digits=12, decimal_places=2)
+    net_savings_last_month = serializers.DecimalField(max_digits=12, decimal_places=2)
+    savings_rate_pct = serializers.DecimalField(max_digits=5, decimal_places=2)
+    summary_message = serializers.CharField()
+    tip = serializers.CharField()
+    health_score = serializers.IntegerField()
+
