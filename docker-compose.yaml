@@ -39,6 +39,9 @@ services:
       - netone
     env_file:
       - '.env'
+    volumes:
+      - ./srcs/frontend:/app
+      - /app/node_modules
 networks:
   netone:
     name: the_network

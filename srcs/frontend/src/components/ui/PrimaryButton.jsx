@@ -17,13 +17,15 @@ export default function PrimaryButton({
 
   const variants = {
     primary:
-      'bg-aura-600 text-white hover:bg-aura-700 active:bg-aura-800 focus:ring-aura-500 shadow-sm hover:shadow-md',
+      'bg-gradient-primary hover:brightness-105 active:brightness-95 focus:ring-primary-400 shadow-sm hover:shadow-md',
+    accent:
+      'bg-gradient-accent hover:brightness-105 active:brightness-95 focus:ring-accent-400 shadow-sm hover:shadow-md',
     secondary:
-      'bg-white text-surface-700 border border-surface-200 hover:bg-surface-50 active:bg-surface-100 focus:ring-aura-500',
+      'bg-white text-surface-700 border border-surface-200 hover:bg-surface-50 active:bg-surface-100 focus:ring-primary-400',
     ghost:
-      'bg-transparent text-aura-600 hover:bg-aura-50 active:bg-aura-100 focus:ring-aura-500',
+      'bg-transparent text-primary hover:bg-primary-50 active:bg-primary-100 focus:ring-primary-400',
     danger:
-      'bg-danger-500 text-white hover:bg-red-600 active:bg-red-700 focus:ring-danger-400',
+      'bg-danger-500 text-white hover:bg-danger-600 active:bg-danger-700 focus:ring-danger-400',
   };
 
   const sizes = {

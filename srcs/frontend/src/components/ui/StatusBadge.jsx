@@ -4,7 +4,7 @@
 
 const VARIANTS = {
   completed: 'bg-success-50 text-success-600 border-success-100',
-  active: 'bg-aura-50 text-aura-700 border-aura-100',
+  active: 'bg-primary-50 text-primary-dark border-primary-100',
   pending: 'bg-warning-50 text-warning-500 border-warning-100',
   failed: 'bg-danger-50 text-danger-500 border-danger-100',
   inactive: 'bg-surface-100 text-surface-500 border-surface-200',

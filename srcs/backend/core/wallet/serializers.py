@@ -74,16 +74,10 @@ class CashOutSimulationSerializer(serializers.Serializer):
     fees = serializers.CharField(max_length=20, required=False, default='0')
 
 
-class CashOutOTPSerializer(serializers.Serializer):
-    """4.6.2 - Cash OUT OTP generation input."""
-    phoneNumber = serializers.CharField(max_length=20)
-
-
 class CashOutConfirmationSerializer(serializers.Serializer):
     """4.6.3 - Cash OUT confirmation input."""
     token = serializers.CharField(max_length=50)
     phoneNumber = serializers.CharField(max_length=20)
-    otp = serializers.CharField(max_length=10)
     amount = serializers.CharField(max_length=20)
     fees = serializers.CharField(max_length=20, required=False, default='0')
 
@@ -102,16 +96,10 @@ class W2WSimulationSerializer(serializers.Serializer):
     mobileNumber = serializers.CharField(max_length=20)
 
 
-class W2WOTPSerializer(serializers.Serializer):
-    """4.7.2 - Wallet to Wallet OTP generation input."""
-    phoneNumber = serializers.CharField(max_length=20)
-
-
 class W2WConfirmationSerializer(serializers.Serializer):
     """4.7.3 - Wallet to Wallet confirmation input."""
     mobileNumber = serializers.CharField(max_length=20)
     contractId = serializers.CharField(max_length=50)
-    otp = serializers.CharField(max_length=10)
     referenceId = serializers.CharField(max_length=20)
     destinationPhone = serializers.CharField(max_length=20)
     fees = serializers.CharField(max_length=20, required=False, default='0')
@@ -131,16 +119,10 @@ class TransferSimulationSerializer(serializers.Serializer):
     RIB = serializers.CharField(max_length=30)
 
 
-class TransferOTPSerializer(serializers.Serializer):
-    """4.8.2 - Transfer OTP generation input."""
-    PhoneNumber = serializers.CharField(max_length=20)
-
-
 class TransferConfirmationSerializer(serializers.Serializer):
     """4.8.3 - Transfer confirmation input."""
     mobileNumber = serializers.CharField(max_length=20)
     ContractId = serializers.CharField(max_length=50)
-    Otp = serializers.CharField(max_length=10)
     referenceId = serializers.CharField(max_length=20)
     destinationPhone = serializers.CharField(max_length=20)
     fees = serializers.CharField(max_length=20, required=False, default='0')
@@ -161,18 +143,12 @@ class ATMSimulationSerializer(serializers.Serializer):
     Amount = serializers.CharField(max_length=20)
 
 
-class ATMOTPSerializer(serializers.Serializer):
-    """4.9.2 - ATM withdrawal OTP generation input."""
-    phoneNumber = serializers.CharField(max_length=20)
-
-
 class ATMConfirmationSerializer(serializers.Serializer):
     """4.9.3 - ATM withdrawal confirmation input."""
     ContractId = serializers.CharField(max_length=50)
     PhoneNumberBeneficiary = serializers.CharField(max_length=20)
     Token = serializers.CharField(max_length=50)
     ReferenceId = serializers.CharField(max_length=20)
-    Otp = serializers.CharField(max_length=10)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -188,16 +164,10 @@ class W2MSimulationSerializer(serializers.Serializer):
     merchantPhoneNumber = serializers.CharField(max_length=20)
 
 
-class W2MOTPSerializer(serializers.Serializer):
-    """4.10.2 - Wallet to Merchant OTP generation input."""
-    phoneNumber = serializers.CharField(max_length=20)
-
-
 class W2MConfirmationSerializer(serializers.Serializer):
     """4.10.3 - Wallet to Merchant confirmation input."""
     ClientPhoneNumber = serializers.CharField(max_length=20)
     ClientContractId = serializers.CharField(max_length=50)
-    OTP = serializers.CharField(max_length=10)
     ReferenceId = serializers.CharField(max_length=20)
     DestinationPhone = serializers.CharField(max_length=20)
     QrCode = serializers.CharField(max_length=100, required=False, default='')
@@ -252,7 +222,6 @@ class MerchantCreationSerializer(serializers.Serializer):
 class MerchantActivationSerializer(serializers.Serializer):
     """4.11.2 - Merchant wallet activation input."""
     Token = serializers.CharField(max_length=50)
-    Otp = serializers.CharField(max_length=10)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -268,16 +237,10 @@ class M2MSimulationSerializer(serializers.Serializer):
     MobileNumber = serializers.CharField(max_length=20)
 
 
-class M2MOTPSerializer(serializers.Serializer):
-    """4.12.2 - Merchant to Merchant OTP generation input."""
-    phoneNumber = serializers.CharField(max_length=20)
-
-
 class M2MConfirmationSerializer(serializers.Serializer):
     """4.12.3 - Merchant to Merchant confirmation input."""
     MobileNumber = serializers.CharField(max_length=20)
     ContractId = serializers.CharField(max_length=50)
-    Otp = serializers.CharField(max_length=10)
     ReferenceId = serializers.CharField(max_length=20)
 
 
@@ -303,14 +266,21 @@ class M2WSimulationSerializer(serializers.Serializer):
     BeneficiaryPhoneNumber = serializers.CharField(max_length=20)
 
 
-class M2WOTPSerializer(serializers.Serializer):
-    """4.14.2 - Merchant to Wallet OTP generation input."""
-    phoneNumber = serializers.CharField(max_length=20)
-
-
 class M2WConfirmationSerializer(serializers.Serializer):
     """4.14.3 - Merchant to Wallet confirmation input."""
     ContractId = serializers.CharField(max_length=50)
     BeneficiaryPhoneNumber = serializers.CharField(max_length=20)
     Amount = serializers.DecimalField(max_digits=12, decimal_places=2)
-    Otp = serializers.CharField(max_length=10)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 4.15  User Survey
+# ═══════════════════════════════════════════════════════════════
+
+class UserSurveyPostSerializer(serializers.Serializer):
+    digitalPlatforms = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)
+    rent = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)
+    groceries = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)
+    utilities = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)
+    entertainment = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)
+    transportation = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)

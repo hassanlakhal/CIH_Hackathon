@@ -20,11 +20,6 @@ import {
   mockPrecreateWallet,
   mockActivateWallet,
   mockGetClientInfo,
-  mockGetWalletOperations,
-  mockGetWalletBalance,
-  mockSimulateBankTransfer,
-  mockSendTransferOtp,
-  mockConfirmBankTransfer,
 } from '../mocks/walletMock.js';
 
 /** Set to true to always use mocks (e.g. demo mode, no backend). */
@@ -48,60 +43,36 @@ async function withFallback(apiFn, mockFn) {
 // state is a query parameter, NOT in the body.
 export function precreateWallet(payload) {
   // Bypassing mocks: hitting real backend directly
-  return apiPost('/wallet', payload, { state: 'precreate' });
+  return apiPost('/wallet/', payload, { state: 'precreate' });
 }
 
 // ─── POST /wallet?state=activate ─────────────────────────────
 // Body contains { token, otp }
 export function activateWallet(payload) {
   // Bypassing mocks: hitting real backend directly
-  return apiPost('/wallet', payload, { state: 'activate' });
+  return apiPost('/wallet/', payload, { state: 'activate' });
 }
 
 // ─── POST /wallet/clientinfo ────────────────────────────────
+// Body: { phoneNumber, identificationType, identificationNumber }
 export function getClientInfo(payload) {
-  return withFallback(
-    () => apiPost('/wallet/clientinfo', payload),
-    () => mockGetClientInfo(payload)
-  );
+  // Bypassing mocks: hitting real backend directly
+  return apiPost('/wallet/clientinfo', payload);
 }
 
-// ─── GET /wallet/operations?contractid=... ──────────────────
-export function getWalletOperations(contractid) {
-  return withFallback(
-    () => apiGet('/wallet/operations', { contractid }),
-    () => mockGetWalletOperations(contractid)
-  );
+// ─── Survey Endpoints ────────────────────────────────────────────────────────
+
+/**
+ * Fetch survey data and status for a given token.
+ */
+export async function getSurvey(token) {
+  return await apiGet('/wallet/survey', { token });
 }
 
-// ─── GET /wallet/balance?contractid=... ─────────────────────
-export function getWalletBalance(contractid) {
-  return withFallback(
-    () => apiGet('/wallet/balance', { contractid }),
-    () => mockGetWalletBalance(contractid)
-  );
+/**
+ * Submit the complete user onboarding financial survey.
+ */
+export async function submitSurvey(payload) {
+  return await apiPost('/wallet/survey', payload);
 }
 
-// ─── POST /wallet/transfer/virement?step=simulation ────────
-export function simulateBankTransfer(payload) {
-  return withFallback(
-    () => apiPost('/wallet/transfer/virement', payload, { step: 'simulation' }),
-    () => mockSimulateBankTransfer(payload)
-  );
-}
-
-// ─── POST /wallet/transfer/virement/otp ────────────────────
-export function sendTransferOtp(payload) {
-  return withFallback(
-    () => apiPost('/wallet/transfer/virement/otp', payload),
-    () => mockSendTransferOtp(payload)
-  );
-}
-
-// ─── POST /wallet/transfer/virement?step=confirmation ──────
-export function confirmBankTransfer(payload) {
-  return withFallback(
-    () => apiPost('/wallet/transfer/virement', payload, { step: 'confirmation' }),
-    () => mockConfirmBankTransfer(payload)
-  );
-}

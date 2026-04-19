@@ -27,13 +27,16 @@ class Wallet(models.Model):
         ('INWI', 'INWI'),
         ('ORANGE', 'Orange'),
     ]
-
+    isSurveyNeed = models.BooleanField(default=False)
+    safetyFloor = models.IntegerField(default=0)
+    goal = models.IntegerField(default=0)
+    goalDescription = models.CharField(default="")
     # ── Identity ──────────────────────────────────────────────
-    phone_number = models.CharField(max_length=20, db_index=True)
+    phone_number = models.CharField(max_length=20, unique=True, db_index=True)
     provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, default='IAM')
     first_name = models.CharField(max_length=100, blank=True, default='')
     last_name = models.CharField(max_length=100, blank=True, default='')
-    email = models.EmailField(blank=True, default='')
+    email = models.EmailField(blank=True, null=True, unique=True)
 
     # ── Personal Info ─────────────────────────────────────────
     place_of_birth = models.CharField(max_length=100, blank=True, default='')
@@ -52,7 +55,7 @@ class Wallet(models.Model):
 
     # ── Identification ────────────────────────────────────────
     legal_type = models.CharField(max_length=20, blank=True, default='')
-    legal_id = models.CharField(max_length=50, blank=True, default='')
+    legal_id = models.CharField(max_length=50, blank=True, null=True, unique=True)
     document_expiry_date = models.CharField(max_length=20, blank=True, null=True)
 
     # ── Wallet Details ────────────────────────────────────────
@@ -229,3 +232,13 @@ class Transaction(models.Model):
     def api_type_code(self):
         """Return the API type code for this transaction."""
         return self.API_TYPE_MAP.get(self.transaction_type, self.transaction_type)
+
+class userSurvey(models.Model):
+    theWallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='survey')
+    digitalPlatforms = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    rent = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    groceries = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    utilities = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    entertainment = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    transportation = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    created_at = models.DateTimeField(auto_now_add=True)

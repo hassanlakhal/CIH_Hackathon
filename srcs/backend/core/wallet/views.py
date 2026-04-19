@@ -1,21 +1,12 @@
-"""
-Wallet Management Views
-========================
-API views for the CIH Wallet Management KIT.
-All endpoints are mocked with realistic responses and backed by DB persistence.
-"""
-
 import base64
 import random
 import string
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
-
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-
-from .models import Wallet, Transaction
+from .models import Wallet, Transaction, userSurvey
 from .serializers import (
     WalletPreRegistrationSerializer, WalletActivationSerializer,
     ClientInfoSerializer,
@@ -28,21 +19,11 @@ from .serializers import (
     MerchantCreationSerializer, MerchantActivationSerializer,
     M2MSimulationSerializer, M2MOTPSerializer, M2MConfirmationSerializer,
     DynamicQRCodeSerializer,
-    M2WSimulationSerializer, M2WOTPSerializer, M2WConfirmationSerializer,
+    M2WSimulationSerializer, M2WOTPSerializer, M2WConfirmationSerializer, UserSurveyPostSerializer
 )
+import requests
+from django.conf import settings
 
-
-def checkHealth(req):
-    if req.method == "GET":
-        now = datetime.now().strftime("%A, %d %B %Y - %H:%M:%S")
-        return HttpResponse(f"""
-            <div style="font-family: Arial; text-align: center; margin-top: 50px;">
-                <h1>Welcome to Cyclops</h1>
-                <p style="font-size: 18px; color: #555;">
-                    Current time: {now}
-                </p>
-            </div>
-        """)
 def _safe_decimal(value, default='0'):
     """Safely convert a value to Decimal."""
     try:
@@ -60,6 +41,7 @@ def wallet_create(request):
     state = request.query_params.get('state', '').strip()
 
     if state == 'precreate':
+        print(f'\n\n{request.data=}\n\n')
         return _wallet_precreate(request)
     elif state == 'activate':
         return _wallet_activate(request)
@@ -79,79 +61,90 @@ def _wallet_precreate(request):
     data = serializer.validated_data
     token = Wallet.generate_token('TR')
     otp = Wallet.generate_otp()
-
-    wallet = Wallet.objects.create(
-        phone_number=data['phoneNumber'].strip(),
-        provider=data.get('phoneOperator', 'IAM'),
-        first_name=data.get('clientFirstName', ''),
-        last_name=data.get('clientLastName', ''),
-        email=data.get('email', ''),
-        place_of_birth=data.get('placeOfBirth', ''),
-        date_of_birth=data.get('dateOfBirth', ''),
-        address_line1=data.get('clientAddress', ''),
-        gender=data.get('gender', ''),
-        legal_type=data.get('legalType', ''),
-        legal_id=data.get('legalId', ''),
-        token=token,
-        otp=otp,
-        wallet_type='CUSTOMER',
-        status='PENDING',
-    )
-
-    return Response({
-        'result': {
-            'activityArea': None,
-            'addressLine1': wallet.address_line1,
-            'addressLine2': None,
-            'addressLine3': None,
-            'addressLine4': None,
-            'agenceId': wallet.agence_id,
-            'averageIncome': None,
-            'birthDay': None,
-            'channelId': wallet.channel_id,
-            'city': None,
-            'country': None,
-            'dateOfBirth': wallet.date_of_birth,
-            'distributeurId': wallet.distributeur_id,
-            'documentExpiryDate1': None,
-            'documentExpiryDate2': None,
-            'documentScan1': '',
-            'documentScan2': '',
-            'documentType1': wallet.legal_type,
-            'documentType2': None,
-            'email': wallet.email,
-            'familyStatus': None,
-            'firstName': wallet.first_name or 'Prenom',
-            'fonction': None,
-            'gender': wallet.gender,
-            'institutionId': wallet.institution_id,
-            'landLineNumber': None,
-            'lastName': wallet.last_name or 'nom',
-            'legalId1': wallet.legal_id,
-            'legalId2': None,
-            'level': None,
-            'mailaddress': None,
-            'mobileNumber': wallet.phone_number,
-            'nationalite': None,
-            'numberofchildren': None,
-            'optField1': None,
-            'optField2': None,
-            'otp': otp,
-            'phoneNumber': None,
-            'placeOfBirth': wallet.place_of_birth,
-            'postCode': None,
-            'productId': wallet.product_id,
-            'productTypeId': wallet.product_type_id,
-            'profession': None,
-            'provider': wallet.provider,
-            'raisonSocial': None,
-            'region': None,
-            'registrationDate': None,
-            'title': None,
-            'token': token,
+    try:
+        wallet = Wallet.objects.create(
+            phone_number=data['phoneNumber'].strip(),
+            provider=data.get('phoneOperator', 'IAM'),
+            first_name=data.get('clientFirstName', ''),
+            last_name=data.get('clientLastName', ''),
+            email=data.get('email', ''),
+            place_of_birth=data.get('placeOfBirth', ''),
+            date_of_birth=data.get('dateOfBirth', ''),
+            address_line1=data.get('clientAddress', ''),
+            gender=data.get('gender', ''),
+            legal_type=data.get('legalType', ''),
+            legal_id=data.get('legalId', ''),
+            token=token,
+            otp=otp,
+            wallet_type='CUSTOMER',
+            status='PENDING',
+        )
+        url = "https://api.ng.termii.com/api/sms/send"
+        payload = {
+            "to": data['phoneNumber'].strip(),
+            "from": "mindesave",
+            "sms": f"Your Mind Save activation code is: {otp}",
+            "type": "plain",
+            "channel": "generic",
+            "api_key": settings.API_KEY_OTP
         }
-    }, status=status.HTTP_201_CREATED)
-
+        response = requests.post(url, json=payload)
+        print(response.json())
+        return Response({
+            'result': {
+                'activityArea': None,
+                'addressLine1': wallet.address_line1,
+                'addressLine2': None,
+                'addressLine3': None,
+                'addressLine4': None,
+                'agenceId': wallet.agence_id,
+                'averageIncome': None,
+                'birthDay': None,
+                'channelId': wallet.channel_id,
+                'city': None,
+                'country': None,
+                'dateOfBirth': wallet.date_of_birth,
+                'distributeurId': wallet.distributeur_id,
+                'documentExpiryDate1': None,
+                'documentExpiryDate2': None,
+                'documentScan1': '',
+                'documentScan2': '',
+                'documentType1': wallet.legal_type,
+                'documentType2': None,
+                'email': wallet.email,
+                'familyStatus': None,
+                'firstName': wallet.first_name or 'Prenom',
+                'fonction': None,
+                'gender': wallet.gender,
+                'institutionId': wallet.institution_id,
+                'landLineNumber': None,
+                'lastName': wallet.last_name or 'nom',
+                'legalId1': wallet.legal_id,
+                'legalId2': None,
+                'level': None,
+                'mailaddress': None,
+                'mobileNumber': wallet.phone_number,
+                'nationalite': None,
+                'numberofchildren': None,
+                'optField1': None,
+                'optField2': None,
+                'phoneNumber': None,
+                'placeOfBirth': wallet.place_of_birth,
+                'postCode': None,
+                'productId': wallet.product_id,
+                'productTypeId': wallet.product_type_id,
+                'profession': None,
+                'provider': wallet.provider,
+                'raisonSocial': None,
+                'region': None,
+                'registrationDate': None,
+                'title': None,
+                'token': token,
+                'otp': otp
+            }
+        }, status=status.HTTP_201_CREATED)
+    except Exception as e:
+        return Response({'error': f'Error {e}'})
 
 def _wallet_activate(request):
     """4.1.2 - Wallet activation."""
@@ -1425,6 +1418,16 @@ def m2m_confirmation(request):
         }
     })
 
+@api_view(['POST'])
+def checkcheck(request):
+    token = request.data.get('token')
+    try:
+        Wallet.objects.get(token=token)
+        return Response(status=status.HTTP_200_OK)
+    except:
+        return Response(status=status.HTTP_400_BAD_REQUEST)
+
+
 
 @api_view(['POST'])
 def dynamic_qr_code(request):
@@ -1581,3 +1584,71 @@ def m2w_confirmation(request):
             'transferAmount': 0,
         }
     })
+
+
+@api_view(['POST', 'GET'])
+def survey_view(request):
+    """
+    POST /wallet/survey - Post user survey for needs
+    GET /wallet/survey?phoneNumber=X - Get user survey needs
+    """
+    if request.method == 'POST':
+        token = request.data.get('token')
+        serializer = UserSurveyPostSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+        
+        data = serializer.validated_data
+        
+        try:
+            wallet = Wallet.objects.get(token=token)
+        except Wallet.DoesNotExist:
+            return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+        
+        survey = userSurvey.objects.create(
+            theWallet=wallet,
+            digitalPlatforms=data.get('digitalPlatforms', Decimal('0.00')),
+            rent=data.get('rent', Decimal('0.00')),
+            groceries=data.get('groceries', Decimal('0.00')),
+            utilities=data.get('utilities', Decimal('0.00')),
+            entertainment=data.get('entertainment', Decimal('0.00')),
+            transportation=data.get('transportation', Decimal('0.00'))
+        )
+        
+        wallet.isSurveyNeed = True
+        wallet.save()
+        
+        return Response({'message': 'Survey submitted successfully.'}, status=status.HTTP_201_CREATED)
+
+    elif request.method == 'GET':
+        phone = request.query_params.get('token')
+        if not phone:
+            return Response({'error': 'token query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+            
+        try:
+            wallet = Wallet.objects.get(phone_number=phone)
+        except Wallet.DoesNotExist:
+            return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+            
+        surveys = userSurvey.objects.filter(theWallet=wallet)
+        if not surveys.exists():
+            return Response({
+                'isSurveyNeed': wallet.isSurveyNeed,
+                'survey': None
+            })
+            
+        latest_survey = surveys.order_by('-created_at').first()
+        
+        return Response({
+            'isSurveyNeed': wallet.isSurveyNeed,
+            'survey': {
+                'id': latest_survey.id,
+                'createdAt': latest_survey.created_at,
+                'digitalPlatforms': float(latest_survey.digitalPlatforms),
+                'rent': float(latest_survey.rent),
+                'groceries': float(latest_survey.groceries),
+                'utilities': float(latest_survey.utilities),
+                'entertainment': float(latest_survey.entertainment),
+                'transportation': float(latest_survey.transportation),
+            }
+        })
