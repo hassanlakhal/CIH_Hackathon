@@ -284,3 +284,62 @@ class UserSurveyPostSerializer(serializers.Serializer):
     utilities = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)
     entertainment = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)
     transportation = serializers.DecimalField(max_digits=12, decimal_places=2, default=0.0)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 5.0  AI Financial Coaching — Savings Goals
+# ═══════════════════════════════════════════════════════════════
+
+class SavingsGoalCreateSerializer(serializers.Serializer):
+    """Input serializer for creating a savings goal."""
+    token = serializers.CharField(max_length=50)
+    title = serializers.CharField(max_length=100)
+    description = serializers.CharField(max_length=500, required=False, default='', allow_blank=True)
+    target_amount = serializers.DecimalField(max_digits=12, decimal_places=2)
+    target_date = serializers.DateField()
+    priority = serializers.ChoiceField(choices=['HIGH', 'MEDIUM', 'LOW'], default='MEDIUM')
+
+
+class SavingsGoalUpdateSerializer(serializers.Serializer):
+    """Input serializer for updating a savings goal."""
+    token = serializers.CharField(max_length=50)
+    title = serializers.CharField(max_length=100, required=False)
+    description = serializers.CharField(max_length=500, required=False, allow_blank=True)
+    target_amount = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+    target_date = serializers.DateField(required=False)
+    priority = serializers.ChoiceField(choices=['HIGH', 'MEDIUM', 'LOW'], required=False)
+    status = serializers.ChoiceField(choices=['ACTIVE', 'PAUSED', 'ABANDONED'], required=False)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 5.1  AI Financial Coaching — Auto-Saving Rules
+# ═══════════════════════════════════════════════════════════════
+
+class AutoSavingRuleCreateSerializer(serializers.Serializer):
+    """Input serializer for creating an auto-saving rule."""
+    token = serializers.CharField(max_length=50)
+    goal_id = serializers.IntegerField(required=False, allow_null=True)
+    rule_type = serializers.ChoiceField(choices=['ROUND_UP', 'PERCENT_INCOME', 'FIXED_MONTHLY'])
+    value = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+
+# ═══════════════════════════════════════════════════════════════
+# 5.2  AI Financial Coaching — Wallet Insight Trigger
+# ═══════════════════════════════════════════════════════════════
+
+class WalletInsightTriggerSerializer(serializers.Serializer):
+    """Input serializer for triggering an AI insight generation."""
+    token = serializers.CharField(max_length=50)
+
+# ═══════════════════════════════════════════════════════════════
+# 6.0  Wallet Settings (Savings Account, Safety Floor)
+# ═══════════════════════════════════════════════════════════════
+
+class WalletSettingsUpdateSerializer(serializers.Serializer):
+    """Input serializer for updating wallet settings like saving bounds."""
+    token = serializers.CharField(max_length=50)
+    safetyFloor = serializers.IntegerField(required=False)
+    sendToSavingAccount = serializers.BooleanField(required=False)
+    monthlySavingAmount = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+    savingTriggerBalance = serializers.DecimalField(max_digits=12, decimal_places=2, required=False)
+

@@ -242,6 +242,7 @@ export default function Dashboard() {
           value={formatCurrency(metrics.safetyFloor)}
           icon="🛡️"
           subtitle="Protected amount"
+          className="animate-pulse"
         />
         <StatCard
           label="Safe to Save"
@@ -256,6 +257,13 @@ export default function Dashboard() {
           value={`${invisibleMoves.length}`}
           icon="🔄"
           subtitle="Invisible moves"
+          className="animate-bounce"
+        />
+        <StatCard
+          label="Saving Account"
+          value={formatCurrency(settings?.savingAccountBalance ?? metrics.totalSaved ?? 0)}
+          icon="🏦"
+          subtitle="Vault reserve"
         />
       </div>
 

@@ -31,6 +31,13 @@ class Wallet(models.Model):
     safetyFloor = models.IntegerField(default=0)
     goal = models.IntegerField(default=0)
     goalDescription = models.CharField(default="")
+    
+    # ── Savings Settings ───────────────────────────────────────
+    sendToSavingAccount = models.BooleanField(default=False)
+    savingAccountBalance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    monthlySavingAmount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    savingTriggerBalance = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    
     # ── Identity ──────────────────────────────────────────────
     phone_number = models.CharField(max_length=20, unique=True, db_index=True)
     provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, default='IAM')
@@ -232,7 +239,6 @@ class Transaction(models.Model):
     def api_type_code(self):
         """Return the API type code for this transaction."""
         return self.API_TYPE_MAP.get(self.transaction_type, self.transaction_type)
-
 class userSurvey(models.Model):
     theWallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='survey')
     digitalPlatforms = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
@@ -242,3 +248,191 @@ class userSurvey(models.Model):
     entertainment = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     transportation = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class SavingsGoal(models.Model):
+    """
+    Represents a specific savings target for a wallet.
+    A wallet can have multiple goals (e.g., Emergency Fund + Vacation).
+    Progress is tracked in real-time via MonthlySavingRecord entries.
+    """
+    STATUS_CHOICES = [
+        ('ACTIVE', 'Active'),
+        ('ACHIEVED', 'Achieved'),
+        ('PAUSED', 'Paused'),
+        ('ABANDONED', 'Abandoned'),
+    ]
+    PRIORITY_CHOICES = [
+        ('HIGH', 'High'),
+        ('MEDIUM', 'Medium'),
+        ('LOW', 'Low'),
+    ]
+
+    wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='goals')
+    title = models.CharField(max_length=100)
+    description = models.TextField(blank=True, default='')
+    target_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    current_saved = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    target_date = models.DateField()
+    predicted_completion_date = models.DateField(null=True, blank=True)
+    monthly_needed = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    priority = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default='MEDIUM')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='ACTIVE')
+    auto_allocate_pct = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal('0.00'))
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-priority', '-created_at']
+
+    def __str__(self):
+        return f"{self.title} — {self.current_saved}/{self.target_amount} ({self.status})"
+
+    def recalculate_monthly_needed(self):
+        """Recalculate how much needs to be saved per month to hit the target_date."""
+        from datetime import date
+        today = date.today()
+        if self.target_date <= today:
+            self.monthly_needed = self.target_amount - self.current_saved
+        else:
+            months_remaining = (self.target_date.year - today.year) * 12 + (self.target_date.month - today.month)
+            if months_remaining <= 0:
+                months_remaining = 1
+            remaining = self.target_amount - self.current_saved
+            self.monthly_needed = max(Decimal('0'), remaining / months_remaining)
+
+
+class MonthlySavingRecord(models.Model):
+    """
+    Tracks what actually happened each month — the historical ledger of progress.
+    Used by the AI to detect spending trends and saving velocity.
+    """
+    DATA_SOURCE_CHOICES = [
+        ('transactions', 'Transactions'),
+        ('survey', 'Survey'),
+        ('mixed', 'Mixed'),
+    ]
+
+    wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='monthly_records')
+    goal = models.ForeignKey(SavingsGoal, on_delete=models.SET_NULL, null=True, blank=True, related_name='records')
+    month = models.DateField()  # always 1st of month, e.g. 2026-04-01
+    income_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    expense_total = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    actual_saved = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    target_for_month = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    safety_floor_applied = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    goal_contribution = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    data_source = models.CharField(max_length=20, choices=DATA_SOURCE_CHOICES, default='transactions')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-month']
+        unique_together = ['wallet', 'goal', 'month']
+
+    def __str__(self):
+        return f"{self.wallet} — {self.month.strftime('%Y-%m')} saved {self.actual_saved}"
+
+
+class AutoSavingRule(models.Model):
+    """
+    Behavioral nudge layer. Enables automatic micro-savings attached to transactions.
+    """
+    RULE_TYPE_CHOICES = [
+        ('ROUND_UP', 'Round Up'),
+        ('PERCENT_INCOME', 'Percent'),
+        ('FIXED_MONTHLY', 'Fixed'),
+    ]
+
+    wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='auto_rules')
+    goal = models.ForeignKey(SavingsGoal, on_delete=models.SET_NULL, null=True, blank=True, related_name='auto_rules')
+    rule_type = models.CharField(max_length=20, choices=RULE_TYPE_CHOICES)
+    value = models.DecimalField(max_digits=12, decimal_places=2)
+    is_active = models.BooleanField(default=True)
+    total_auto_saved = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.rule_type} — {self.value} ({'Active' if self.is_active else 'Inactive'})"
+
+
+class WalletInsight(models.Model):
+    """
+    AI-generated monthly report. Contains full financial analysis,
+    forecasts, categorized breakdowns, and AI narrative.
+    """
+    wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='insights')
+    generated_at = models.DateTimeField(auto_now_add=True)
+    month = models.DateField()
+
+    # === Last Month Stats ===
+    total_income_last_month = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    total_expenses_last_month = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    net_savings_last_month = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    savings_rate_pct = models.DecimalField(max_digits=5, decimal_places=1, default=Decimal('0.0'))
+
+    # === This Month Forecast ===
+    estimated_income_this_month = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    estimated_expenses_this_month = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    recommended_saving_this_month = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+
+    # === Safety & Goal ===
+    safety_floor_recommendation = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal('0.00'))
+    predicted_goal_date = models.DateField(null=True, blank=True)
+    goal_on_track = models.BooleanField(default=True)
+
+    # === Categorized Breakdown (JSON) ===
+    income_sources = models.JSONField(default=dict)
+    expense_categories = models.JSONField(default=dict)
+    necessary_expenses = models.JSONField(default=dict)
+    optional_expenses = models.JSONField(default=dict)
+    saving_opportunities = models.JSONField(default=list)
+
+    # === AI Narrative ===
+    summary_message = models.TextField(default='')
+    tip = models.TextField(default='')
+    warning = models.TextField(blank=True, default='')
+    goal_achievement_plan = models.TextField(blank=True, default='')
+
+    # === Health Score (0-100) ===
+    health_score = models.IntegerField(default=0)
+    health_score_delta = models.IntegerField(default=0)
+
+    raw_ai_response = models.JSONField(default=dict)
+
+    class Meta:
+        ordering = ['-generated_at']
+
+    def __str__(self):
+        return f"Insight for {self.wallet} — {self.month.strftime('%Y-%m')} (Score: {self.health_score})"
+
+
+class FinancialHealthScore(models.Model):
+    """
+    Lightweight monthly score to track financial discipline over time.
+    Separate from the full insight for quick queries and sparkline data.
+    """
+    LABEL_CHOICES = [
+        ('EXCELLENT', 'Excellent'),
+        ('GOOD', 'Good'),
+        ('NEEDS_WORK', 'Needs Work'),
+        ('CRITICAL', 'Critical'),
+    ]
+
+    wallet = models.ForeignKey(Wallet, on_delete=models.CASCADE, related_name='health_scores')
+    month = models.DateField()
+    score = models.IntegerField(default=0)
+    savings_rate_score = models.IntegerField(default=0)
+    goal_progress_score = models.IntegerField(default=0)
+    stability_score = models.IntegerField(default=0)
+    label = models.CharField(max_length=20, choices=LABEL_CHOICES, default='GOOD')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-month']
+        unique_together = ['wallet', 'month']
+
+    def __str__(self):
+        return f"{self.wallet} — {self.month.strftime('%Y-%m')}: {self.score}/100 ({self.label})"

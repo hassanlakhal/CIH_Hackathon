@@ -8,6 +8,9 @@ import Settings from './components/pages/Settings.jsx';
 import Transactions from './components/pages/Transactions.jsx';
 import TransactionAction from './components/pages/TransactionAction.jsx';
 import SurveyPage from './components/pages/SurveyPage.jsx';
+import GoalsPage from './components/pages/GoalsPage.jsx';
+import InsightsPage from './components/pages/InsightsPage.jsx';
+import HealthPage from './components/pages/HealthPage.jsx';
 
 export default function App() {
   return (
@@ -18,6 +21,9 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/activity" element={<ActivityFeed />} />
           <Route path="/transactions" element={<Transactions />} />
+          <Route path="/goals" element={<GoalsPage />} />
+          <Route path="/insights" element={<InsightsPage />} />
+          <Route path="/health" element={<HealthPage />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
 

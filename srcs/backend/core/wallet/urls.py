@@ -49,6 +49,14 @@ wallet_urlpatterns = [
 
     # 4.15 - User Survey
     path('survey', views.survey_view, name='survey-view'),
+
+    # 5.0 - AI Financial Coaching
+    path('insight', views.wallet_insight, name='wallet-insight'),
+    path('goals', views.savings_goals, name='savings-goals'),
+    path('goals/<int:goal_id>', views.savings_goal_detail, name='savings-goal-detail'),
+    path('auto-save', views.auto_save_rules, name='auto-save-rules'),
+    path('health', views.health_scores, name='health-scores'),
+    path('settings', views.wallet_settings, name='wallet-settings'),
 ]
 
 

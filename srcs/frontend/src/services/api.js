@@ -177,3 +177,46 @@ export async function apiPost(path, body = {}, params = {}) {
 
   return response.json();
 }
+
+/**
+ * Generic PATCH request helper.
+ * @param {string} path - Endpoint path.
+ * @param {object} body - Request body (JSON).
+ * @param {object} params - Query parameters.
+ * @returns {Promise<object>} Parsed JSON response.
+ */
+export async function apiPatch(path, body = {}, params = {}) {
+  await performAuthCheck(path);
+  const url = buildUrl(path, params);
+
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    let errorMsg = `PATCH ${path} failed: ${response.status}`;
+    try {
+      const rawText = await response.text();
+      try {
+        const errBody = JSON.parse(rawText);
+        if (errBody.message) errorMsg = errBody.message;
+        else if (errBody.error) errorMsg = errBody.error;
+        else if (errBody.detail) errorMsg = errBody.detail;
+      } catch {
+        if (rawText) errorMsg = rawText;
+      }
+    } catch (e) {
+      // Ignore
+    }
+    const error = new Error(errorMsg);
+    error.status = response.status;
+    throw error;
+  }
+
+  return response.json();
+}

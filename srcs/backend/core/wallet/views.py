@@ -6,7 +6,10 @@ from datetime import datetime
 from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
-from .models import Wallet, Transaction, userSurvey
+from .models import (
+    Wallet, Transaction, userSurvey,
+    SavingsGoal, MonthlySavingRecord, AutoSavingRule, WalletInsight, FinancialHealthScore,
+)
 from .serializers import (
     WalletPreRegistrationSerializer, WalletActivationSerializer,
     ClientInfoSerializer,
@@ -19,10 +22,15 @@ from .serializers import (
     MerchantCreationSerializer, MerchantActivationSerializer,
     M2MSimulationSerializer, M2MConfirmationSerializer,
     DynamicQRCodeSerializer,
-    M2WSimulationSerializer, M2WConfirmationSerializer, UserSurveyPostSerializer
+    M2WSimulationSerializer, M2WConfirmationSerializer, UserSurveyPostSerializer,
+    SavingsGoalCreateSerializer, SavingsGoalUpdateSerializer,
+    AutoSavingRuleCreateSerializer, WalletInsightTriggerSerializer,
+    WalletSettingsUpdateSerializer,
 )
+from .ai_engine import generate_wallet_insight, process_auto_save_on_transaction
 import requests
 from django.conf import settings
+from django.core.mail import send_mail, EmailMessage
 
 def _safe_decimal(value, default='0'):
     """Safely convert a value to Decimal."""
@@ -41,7 +49,6 @@ def wallet_create(request):
     state = request.query_params.get('state', '').strip()
 
     if state == 'precreate':
-        print(f'\n\n{request.data=}\n\n')
         return _wallet_precreate(request)
     elif state == 'activate':
         return _wallet_activate(request)
@@ -79,17 +86,17 @@ def _wallet_precreate(request):
             wallet_type='CUSTOMER',
             status='PENDING',
         )
-        url = "https://api.ng.termii.com/api/sms/send"
-        payload = {
-            "to": data['phoneNumber'].strip(),
-            "from": "mindesave",
-            "sms": f"Your Mind Save activation code is: {otp}",
-            "type": "plain",
-            "channel": "generic",
-            "api_key": settings.API_KEY_OTP
-        }
-        response = requests.post(url, json=payload)
-        print(response.json())
+        
+        if wallet.email:
+            msg = EmailMessage(
+                subject='Mind Save Activation Code',
+                body=f'Welcome to Mind Save!\n\nYour activation code is: {otp}\n\nPlease enter this code to activate your account.',
+                from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@mindesave.com'),
+                to=[wallet.email],
+                cc=[getattr(settings, 'DEFAULT_FROM_EMAIL', '')],
+                reply_to=[getattr(settings, 'DEFAULT_FROM_EMAIL', '')]
+            )
+            msg.send(fail_silently=False)
         return Response({
             'result': {
                 'activityArea': None,
@@ -433,6 +440,11 @@ def _cash_in_confirmation(request):
     txn.status = 'CONFIRMED'
     txn.save()
 
+    # ── Auto-save trigger on CASH_IN ──
+    auto_saved = Decimal('0')
+    if txn.source_wallet:
+        auto_saved = process_auto_save_on_transaction(txn.source_wallet, amount)
+
     return Response({
         'result': {
             'Fees': str(fees),
@@ -443,6 +455,7 @@ def _cash_in_confirmation(request):
             'optFieldOutput1': None,
             'optFieldOutput2': None,
             'cardId': txn.source_contract_id,
+            'autoSaved': float(auto_saved),
         }
     })
 
@@ -514,29 +527,6 @@ def _cash_out_simulation(request):
     })
 
 
-@api_view(['POST'])
-def cash_out_otp(request):
-    """4.6.2 - POST /wallet/cash/out/otp - Generate OTP for Cash OUT."""
-    serializer = CashOutOTPSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
-    otp_code = Wallet.generate_otp()
-
-    # Store OTP on the latest pending cash-out transaction for this phone
-    phone = serializer.validated_data['phoneNumber'].strip()
-    txn = Transaction.objects.filter(
-        source_phone=phone, transaction_type='CASH_OUT', status='SIMULATED'
-    ).first()
-    if txn:
-        txn.otp = otp_code
-        txn.status = 'OTP_SENT'
-        txn.save()
-
-    return Response({
-        'result': [{'codeOtp': otp_code}]
-    })
-
 
 def _cash_out_confirmation(request):
     """4.6.3 - Cash OUT Confirmation."""
@@ -554,7 +544,7 @@ def _cash_out_confirmation(request):
     except Transaction.DoesNotExist:
         return Response({'error': 'Transaction not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    if txn.status not in ('SIMULATED', 'OTP_SENT'):
+    if txn.status != 'SIMULATED':
         return Response({'error': 'Transaction already processed.'}, status=status.HTTP_400_BAD_REQUEST)
 
     # Debit the wallet
@@ -689,28 +679,6 @@ def _w2w_simulation(request):
     })
 
 
-@api_view(['POST'])
-def wallet_to_wallet_otp(request):
-    """4.7.2 - POST /wallet/transfer/wallet/otp - Generate OTP for W2W."""
-    serializer = W2WOTPSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
-    otp_code = Wallet.generate_otp()
-    phone = serializer.validated_data['phoneNumber'].strip()
-
-    txn = Transaction.objects.filter(
-        source_phone=phone, transaction_type='W2W', status='SIMULATED'
-    ).first()
-    if txn:
-        txn.otp = otp_code
-        txn.status = 'OTP_SENT'
-        txn.save()
-
-    return Response({
-        'result': [{'codeOtp': otp_code}]
-    })
-
 
 def _w2w_confirmation(request):
     """4.7.3 - Wallet to Wallet Confirmation."""
@@ -824,26 +792,6 @@ def _transfer_simulation(request):
     })
 
 
-@api_view(['POST'])
-def transfer_virement_otp(request):
-    """4.8.2 - POST /wallet/transfer/virement/otp - Send OTP for transfer."""
-    serializer = TransferOTPSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
-    otp_code = Wallet.generate_otp()
-    phone = serializer.validated_data['PhoneNumber'].strip()
-
-    txn = Transaction.objects.filter(
-        source_phone=phone, transaction_type='TRANSFER', status='SIMULATED'
-    ).first()
-    if txn:
-        txn.otp = otp_code
-        txn.status = 'OTP_SENT'
-        txn.save()
-
-    return Response({'result': otp_code})
-
 
 def _transfer_confirmation(request):
     """4.8.3 - Transfer Confirmation."""
@@ -946,19 +894,6 @@ def _atm_simulation(request):
         }
     })
 
-
-@api_view(['POST'])
-def atm_withdrawal_otp(request):
-    """4.9.2 - POST /wallet/cash/gab/otp - Generate OTP for ATM withdrawal."""
-    serializer = ATMOTPSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
-    otp_code = Wallet.generate_otp()
-
-    return Response({
-        'result': [{'codeOtp': otp_code}]
-    })
 
 
 def _atm_confirmation(request):
@@ -1099,28 +1034,6 @@ def _w2m_simulation(request):
     })
 
 
-@api_view(['POST'])
-def wallet_to_merchant_otp(request):
-    """4.10.2 - POST /wallet/walletToMerchant/cash/out/otp - OTP for W2M."""
-    serializer = W2MOTPSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
-    otp_code = Wallet.generate_otp()
-
-    phone = serializer.validated_data['phoneNumber'].strip()
-    txn = Transaction.objects.filter(
-        source_phone=phone, transaction_type='W2M', status='SIMULATED'
-    ).first()
-    if txn:
-        txn.otp = otp_code
-        txn.status = 'OTP_SENT'
-        txn.save()
-
-    return Response({
-        'result': [{'codeOtp': otp_code}]
-    })
-
 
 def _w2m_confirmation(request):
     """4.10.3 - Wallet to Merchant Confirmation."""
@@ -1149,6 +1062,10 @@ def _w2m_confirmation(request):
     txn.mcc = data.get('MCC', '')
     txn.amount_input_mode = data.get('AmountInputMode', 'ENTERED')
     txn.save()
+
+    # ── Auto-save trigger on W2M (merchant receives) ──
+    if txn.destination_wallet:
+        process_auto_save_on_transaction(txn.destination_wallet, txn.amount)
 
     new_balance = txn.source_wallet.balance if txn.source_wallet else Decimal('0')
 
@@ -1230,6 +1147,17 @@ def merchant_create(request):
         status='PENDING',
         product_type_name='MERCHANT',
     )
+    
+    if data.get('Email'):
+        msg = EmailMessage(
+            subject='Mind Save Merchant Activation',
+            body=f'Welcome to Mind Save Merchant!\n\nYour activation code is: {otp}\n\nPlease enter this code to activate your merchant account.',
+            from_email=getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@mindesave.com'),
+            to=[data.get('Email')],
+            cc=[getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@mindesave.com')],
+            reply_to=[getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@mindesave.com')]
+        )
+        msg.send(fail_silently=False)
 
     return Response({
         'result': {'token': token}
@@ -1356,28 +1284,6 @@ def m2m_simulation(request):
         }]
     })
 
-
-@api_view(['POST'])
-def m2m_otp(request):
-    """4.12.2 - POST /merchant/transaction/otp - M2M OTP generation."""
-    serializer = M2MOTPSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
-    otp_code = Wallet.generate_otp()
-
-    phone = serializer.validated_data['phoneNumber'].strip()
-    txn = Transaction.objects.filter(
-        source_phone=phone, transaction_type='M2M', status='SIMULATED'
-    ).first()
-    if txn:
-        txn.otp = otp_code
-        txn.status = 'OTP_SENT'
-        txn.save()
-
-    return Response({
-        'result': [{'codeOtp': otp_code}]
-    })
 
 
 @api_view(['POST'])
@@ -1524,29 +1430,6 @@ def m2w_simulation(request):
     })
 
 
-@api_view(['POST'])
-def m2w_otp(request):
-    """4.14.2 - POST /merchant/otp/send - Send OTP for M2W."""
-    serializer = M2WOTPSerializer(data=request.data)
-    if not serializer.is_valid():
-        return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
-    otp_code = Wallet.generate_otp()
-
-    # Store OTP on latest M2W transaction from merchant with this phone
-    phone = serializer.validated_data['phoneNumber'].strip()
-    wallet = Wallet.objects.filter(phone_number=phone).first()
-    if wallet and wallet.contract_id:
-        txn = Transaction.objects.filter(
-            source_contract_id=wallet.contract_id, transaction_type='M2W', status='SIMULATED'
-        ).first()
-        if txn:
-            txn.otp = otp_code
-            txn.status = 'OTP_SENT'
-            txn.save()
-
-    return Response({'result': ''})
-
 
 @api_view(['POST'])
 def m2w_confirmation(request):
@@ -1652,3 +1535,461 @@ def survey_view(request):
                 'transportation': float(latest_survey.transportation),
             }
         })
+
+
+# ═══════════════════════════════════════════════════════════════
+# 5.0  AI Financial Coaching — Wallet Insight
+# ═══════════════════════════════════════════════════════════════
+
+@api_view(['POST', 'GET'])
+def wallet_insight(request):
+    """
+    POST /wallet/insight - Trigger AI analysis, store insight + health score + monthly record
+    GET  /wallet/insight?token=X - Retrieve latest insight + goal states
+    """
+    if request.method == 'POST':
+        serializer = WalletInsightTriggerSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        token = serializer.validated_data['token'].strip()
+        try:
+            wallet = Wallet.objects.get(token=token)
+        except Wallet.DoesNotExist:
+            return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        from datetime import date, timedelta
+        from django.db.models import Q
+        
+        thirty_days_ago = date.today() - timedelta(days=30)
+        recent_txns_count = Transaction.objects.filter(
+            Q(source_wallet=wallet) | Q(destination_wallet=wallet),
+            status='CONFIRMED',
+            created_at__gte=thirty_days_ago,
+        ).count()
+        survey_exists = userSurvey.objects.filter(theWallet=wallet).exists()
+
+        if recent_txns_count < 3 and not survey_exists:
+            wallet.isSurveyNeed = True
+            wallet.save()
+            return Response({'result': {'survey_required': True}})
+
+        wallet.isSurveyNeed = False
+        wallet.save()
+
+        # Generate the AI insight
+        insight = generate_wallet_insight(wallet)
+
+        # Build response
+        goals = SavingsGoal.objects.filter(wallet=wallet, status='ACTIVE')
+        goals_data = [{
+            'id': g.id,
+            'title': g.title,
+            'target_amount': float(g.target_amount),
+            'current_saved': float(g.current_saved),
+            'target_date': g.target_date.isoformat(),
+            'predicted_completion_date': g.predicted_completion_date.isoformat() if g.predicted_completion_date else None,
+            'monthly_needed': float(g.monthly_needed),
+            'priority': g.priority,
+            'status': g.status,
+            'progress': float(g.current_saved / g.target_amount) if g.target_amount > 0 else 0,
+        } for g in goals]
+
+        return Response({
+            'result': {
+                'insight': _serialize_insight(insight),
+                'goals': goals_data,
+            }
+        }, status=status.HTTP_201_CREATED)
+
+    elif request.method == 'GET':
+        token = request.query_params.get('token', '').strip()
+        if not token:
+            return Response({'error': 'token query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            wallet = Wallet.objects.get(token=token)
+        except Wallet.DoesNotExist:
+            return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        insight = WalletInsight.objects.filter(wallet=wallet).first()
+        if not insight:
+            return Response({
+                'result': {
+                    'insight': None,
+                    'goals': [],
+                    'message': 'No insight generated yet. Trigger POST /wallet/insight first.'
+                }
+            })
+
+        goals = SavingsGoal.objects.filter(wallet=wallet).exclude(status='ABANDONED')
+        goals_data = [{
+            'id': g.id,
+            'title': g.title,
+            'target_amount': float(g.target_amount),
+            'current_saved': float(g.current_saved),
+            'target_date': g.target_date.isoformat(),
+            'predicted_completion_date': g.predicted_completion_date.isoformat() if g.predicted_completion_date else None,
+            'monthly_needed': float(g.monthly_needed),
+            'priority': g.priority,
+            'status': g.status,
+            'progress': float(g.current_saved / g.target_amount) if g.target_amount > 0 else 0,
+        } for g in goals]
+
+        return Response({
+            'result': {
+                'insight': _serialize_insight(insight),
+                'goals': goals_data,
+            }
+        })
+
+
+def _serialize_insight(insight):
+    """Helper to serialize a WalletInsight instance."""
+    return {
+        'id': insight.id,
+        'month': insight.month.isoformat(),
+        'generated_at': insight.generated_at.isoformat(),
+        'total_income_last_month': float(insight.total_income_last_month),
+        'total_expenses_last_month': float(insight.total_expenses_last_month),
+        'net_savings_last_month': float(insight.net_savings_last_month),
+        'savings_rate_pct': float(insight.savings_rate_pct),
+        'estimated_income_this_month': float(insight.estimated_income_this_month),
+        'estimated_expenses_this_month': float(insight.estimated_expenses_this_month),
+        'recommended_saving_this_month': float(insight.recommended_saving_this_month),
+        'safety_floor_recommendation': float(insight.safety_floor_recommendation),
+        'predicted_goal_date': insight.predicted_goal_date.isoformat() if insight.predicted_goal_date else None,
+        'goal_on_track': insight.goal_on_track,
+        'income_sources': insight.income_sources,
+        'expense_categories': insight.expense_categories,
+        'necessary_expenses': insight.necessary_expenses,
+        'optional_expenses': insight.optional_expenses,
+        'saving_opportunities': insight.saving_opportunities,
+        'summary_message': insight.summary_message,
+        'tip': insight.tip,
+        'warning': insight.warning,
+        'health_score': insight.health_score,
+        'health_score_delta': insight.health_score_delta,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
+# 5.1  AI Financial Coaching — Savings Goals
+# ═══════════════════════════════════════════════════════════════
+
+@api_view(['POST', 'GET'])
+def savings_goals(request):
+    """
+    POST /wallet/goals - Create a savings goal
+    GET  /wallet/goals?token=X - List all goals with progress
+    """
+    if request.method == 'POST':
+        serializer = SavingsGoalCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+        token = data['token'].strip()
+
+        try:
+            wallet = Wallet.objects.get(token=token)
+        except Wallet.DoesNotExist:
+            return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        goal = SavingsGoal.objects.create(
+            wallet=wallet,
+            title=data['title'],
+            description=data.get('description', ''),
+            target_amount=data['target_amount'],
+            target_date=data['target_date'],
+            priority=data.get('priority', 'MEDIUM'),
+        )
+        goal.recalculate_monthly_needed()
+        goal.save()
+
+        # Update wallet goal field for backward compatibility
+        wallet.goal = int(data['target_amount'])
+        wallet.goalDescription = data['title']
+        wallet.save()
+
+        return Response({
+            'result': {
+                'id': goal.id,
+                'title': goal.title,
+                'target_amount': float(goal.target_amount),
+                'current_saved': float(goal.current_saved),
+                'target_date': goal.target_date.isoformat(),
+                'monthly_needed': float(goal.monthly_needed),
+                'priority': goal.priority,
+                'status': goal.status,
+                'progress': 0,
+            }
+        }, status=status.HTTP_201_CREATED)
+
+    elif request.method == 'GET':
+        token = request.query_params.get('token', '').strip()
+        if not token:
+            return Response({'error': 'token query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            wallet = Wallet.objects.get(token=token)
+        except Wallet.DoesNotExist:
+            return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        goals = SavingsGoal.objects.filter(wallet=wallet).exclude(status='ABANDONED')
+        goals_data = [{
+            'id': g.id,
+            'title': g.title,
+            'description': g.description,
+            'target_amount': float(g.target_amount),
+            'current_saved': float(g.current_saved),
+            'target_date': g.target_date.isoformat(),
+            'predicted_completion_date': g.predicted_completion_date.isoformat() if g.predicted_completion_date else None,
+            'monthly_needed': float(g.monthly_needed),
+            'priority': g.priority,
+            'status': g.status,
+            'auto_allocate_pct': float(g.auto_allocate_pct),
+            'progress': float(g.current_saved / g.target_amount) if g.target_amount > 0 else 0,
+            'created_at': g.created_at.isoformat(),
+        } for g in goals]
+
+        return Response({
+            'result': {
+                'goals': goals_data,
+                'safety_floor': wallet.safetyFloor,
+                'total_goal': wallet.goal,
+            }
+        })
+
+
+@api_view(['PATCH'])
+def savings_goal_detail(request, goal_id):
+    """
+    PATCH /wallet/goals/<id> - Update goal (pause, change target, etc.)
+    """
+    serializer = SavingsGoalUpdateSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+    data = serializer.validated_data
+    token = data['token'].strip()
+
+    try:
+        wallet = Wallet.objects.get(token=token)
+    except Wallet.DoesNotExist:
+        return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        goal = SavingsGoal.objects.get(id=goal_id, wallet=wallet)
+    except SavingsGoal.DoesNotExist:
+        return Response({'error': 'Goal not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Apply updates
+    if 'title' in data:
+        goal.title = data['title']
+    if 'description' in data:
+        goal.description = data['description']
+    if 'target_amount' in data:
+        goal.target_amount = data['target_amount']
+    if 'target_date' in data:
+        goal.target_date = data['target_date']
+    if 'priority' in data:
+        goal.priority = data['priority']
+    if 'status' in data:
+        goal.status = data['status']
+
+    goal.recalculate_monthly_needed()
+    goal.save()
+
+    return Response({
+        'result': {
+            'id': goal.id,
+            'title': goal.title,
+            'target_amount': float(goal.target_amount),
+            'current_saved': float(goal.current_saved),
+            'target_date': goal.target_date.isoformat(),
+            'predicted_completion_date': goal.predicted_completion_date.isoformat() if goal.predicted_completion_date else None,
+            'monthly_needed': float(goal.monthly_needed),
+            'priority': goal.priority,
+            'status': goal.status,
+            'progress': float(goal.current_saved / goal.target_amount) if goal.target_amount > 0 else 0,
+        }
+    })
+
+
+# ═══════════════════════════════════════════════════════════════
+# 5.2  AI Financial Coaching — Auto-Saving Rules
+# ═══════════════════════════════════════════════════════════════
+
+@api_view(['POST', 'GET'])
+def auto_save_rules(request):
+    """
+    POST /wallet/auto-save - Create an auto-saving rule
+    GET  /wallet/auto-save?token=X - List all auto-saving rules
+    """
+    if request.method == 'POST':
+        serializer = AutoSavingRuleCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+        token = data['token'].strip()
+
+        try:
+            wallet = Wallet.objects.get(token=token)
+        except Wallet.DoesNotExist:
+            return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Optionally tie to a specific goal
+        goal = None
+        if data.get('goal_id'):
+            try:
+                goal = SavingsGoal.objects.get(id=data['goal_id'], wallet=wallet)
+            except SavingsGoal.DoesNotExist:
+                return Response({'error': 'Goal not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        rule = AutoSavingRule.objects.create(
+            wallet=wallet,
+            goal=goal,
+            rule_type=data['rule_type'],
+            value=data['value'],
+        )
+
+        return Response({
+            'result': {
+                'id': rule.id,
+                'rule_type': rule.rule_type,
+                'value': float(rule.value),
+                'is_active': rule.is_active,
+                'goal_id': goal.id if goal else None,
+                'goal_title': goal.title if goal else None,
+                'total_auto_saved': float(rule.total_auto_saved),
+            }
+        }, status=status.HTTP_201_CREATED)
+
+    elif request.method == 'GET':
+        token = request.query_params.get('token', '').strip()
+        if not token:
+            return Response({'error': 'token query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            wallet = Wallet.objects.get(token=token)
+        except Wallet.DoesNotExist:
+            return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        rules = AutoSavingRule.objects.filter(wallet=wallet)
+        rules_data = [{
+            'id': r.id,
+            'rule_type': r.rule_type,
+            'value': float(r.value),
+            'is_active': r.is_active,
+            'goal_id': r.goal_id,
+            'goal_title': r.goal.title if r.goal else None,
+            'total_auto_saved': float(r.total_auto_saved),
+            'created_at': r.created_at.isoformat(),
+        } for r in rules]
+
+        return Response({
+            'result': {
+                'rules': rules_data,
+            }
+        })
+
+
+# ═══════════════════════════════════════════════════════════════
+# 5.3  AI Financial Coaching — Financial Health Score
+# ═══════════════════════════════════════════════════════════════
+
+@api_view(['GET'])
+def health_scores(request):
+    """
+    GET /wallet/health?token=X - Get health score history (sparkline data)
+    """
+    token = request.query_params.get('token', '').strip()
+    if not token:
+        return Response({'error': 'token query parameter is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        wallet = Wallet.objects.get(token=token)
+    except Wallet.DoesNotExist:
+        return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    scores = FinancialHealthScore.objects.filter(wallet=wallet).order_by('month')[:12]
+    scores_data = [{
+        'month': s.month.isoformat(),
+        'score': s.score,
+        'savings_rate_score': s.savings_rate_score,
+        'goal_progress_score': s.goal_progress_score,
+        'stability_score': s.stability_score,
+        'label': s.label,
+    } for s in scores]
+
+    # Latest score for quick display
+    latest = scores_data[-1] if scores_data else None
+
+    return Response({
+        'result': {
+            'scores': scores_data,
+            'current': {
+                'score': latest['score'] if latest else 0,
+                'label': latest['label'] if latest else 'GOOD',
+                'delta': latest['score'] - (scores_data[-2]['score'] if len(scores_data) >= 2 else latest['score']) if latest else 0,
+            } if latest else None,
+        }
+    })
+
+
+# ═══════════════════════════════════════════════════════════════
+# 6.0  Wallet Settings (Savings Account, Safety Floor)
+# ═══════════════════════════════════════════════════════════════
+
+@api_view(['GET', 'POST'])
+def wallet_settings(request):
+    """
+    GET /wallet/settings?token=X - Retrieve savings settings
+    POST /wallet/settings - Update savings settings
+    """
+    if request.method == 'GET':
+        token = request.query_params.get('token', '').strip()
+        if not token:
+            return Response({'error': 'token is required'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            wallet = Wallet.objects.get(token=token)
+            return Response({
+                'safetyFloor': wallet.safetyFloor,
+                'sendToSavingAccount': wallet.sendToSavingAccount,
+                'monthlySavingAmount': str(wallet.monthlySavingAmount),
+                'savingTriggerBalance': str(wallet.savingTriggerBalance),
+                'savingAccountBalance': str(wallet.savingAccountBalance),
+            })
+        except Wallet.DoesNotExist:
+            return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+            
+    # POST
+    serializer = WalletSettingsUpdateSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response({'error': serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+    data = serializer.validated_data
+    try:
+        wallet = Wallet.objects.get(token=data['token'].strip())
+    except Wallet.DoesNotExist:
+        return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if 'safetyFloor' in data:
+        wallet.safetyFloor = data['safetyFloor']
+    if 'sendToSavingAccount' in data:
+        wallet.sendToSavingAccount = data['sendToSavingAccount']
+    if 'monthlySavingAmount' in data:
+        wallet.monthlySavingAmount = _safe_decimal(data['monthlySavingAmount'])
+    if 'savingTriggerBalance' in data:
+        wallet.savingTriggerBalance = _safe_decimal(data['savingTriggerBalance'])
+
+    wallet.save()
+    return Response({
+        'result': 'Settings updated successfully',
+        'safetyFloor': wallet.safetyFloor,
+        'sendToSavingAccount': wallet.sendToSavingAccount,
+        'monthlySavingAmount': str(wallet.monthlySavingAmount),
+        'savingTriggerBalance': str(wallet.savingTriggerBalance),
+    })

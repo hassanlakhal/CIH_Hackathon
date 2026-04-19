@@ -1,21 +1,4 @@
-/**
- * Wallet Service — mirrors the official Wallet Management KIT API.
- *
- * Each function corresponds to an official API endpoint.
- * When the backend is unavailable, mock responses are returned instead.
- *
- * Official endpoints:
- *   POST /wallet?state=precreate           → body = client registration fields
- *   POST /wallet?state=activate            → body = { token, otp }
- *   POST /wallet/clientinfo
- *   GET  /wallet/operations?contractid=...
- *   GET  /wallet/balance?contractid=...
- *   POST /wallet/transfer/virement?step=simulation
- *   POST /wallet/transfer/virement/otp
- *   POST /wallet/transfer/virement?step=confirmation
- */
-
-import { apiGet, apiPost } from './api.js';
+import { apiGet, apiPost, apiPatch } from './api.js';
 import {
   mockPrecreateWallet,
   mockActivateWallet,
@@ -39,40 +22,92 @@ async function withFallback(apiFn, mockFn) {
 }
 
 // ─── POST /wallet?state=precreate ────────────────────────────
-// Body contains official registration fields (phoneNumber, clientFirstName, etc.)
-// state is a query parameter, NOT in the body.
 export function precreateWallet(payload) {
-  // Bypassing mocks: hitting real backend directly
   return apiPost('/wallet/', payload, { state: 'precreate' });
 }
 
 // ─── POST /wallet?state=activate ─────────────────────────────
-// Body contains { token, otp }
 export function activateWallet(payload) {
-  // Bypassing mocks: hitting real backend directly
   return apiPost('/wallet/', payload, { state: 'activate' });
 }
 
 // ─── POST /wallet/clientinfo ────────────────────────────────
-// Body: { phoneNumber, identificationType, identificationNumber }
 export function getClientInfo(payload) {
-  // Bypassing mocks: hitting real backend directly
   return apiPost('/wallet/clientinfo', payload);
 }
 
-// ─── Survey Endpoints ────────────────────────────────────────────────────────
+// ─── Survey Endpoints ────────────────────────────────────────
 
-/**
- * Fetch survey data and status for a given token.
- */
 export async function getSurvey(token) {
   return await apiGet('/wallet/survey', { token });
 }
 
-/**
- * Submit the complete user onboarding financial survey.
- */
 export async function submitSurvey(payload) {
   return await apiPost('/wallet/survey', payload);
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// AI Financial Coaching Endpoints
+// ═══════════════════════════════════════════════════════════════
+
+// ─── Insights ────────────────────────────────────────────────
+
+/** Trigger AI insight generation */
+export async function triggerInsight(token) {
+  return await apiPost('/wallet/insight', { token });
+}
+
+/** Fetch latest insight + goals */
+export async function getInsight(token) {
+  return await apiGet('/wallet/insight', { token });
+}
+
+// ─── Goals ───────────────────────────────────────────────────
+
+/** List all goals for a wallet */
+export async function getGoals(token) {
+  return await apiGet('/wallet/goals', { token });
+}
+
+/** Create a new savings goal */
+export async function createGoal(payload) {
+  return await apiPost('/wallet/goals', payload);
+}
+
+/** Update a savings goal (pause, change target, etc.) */
+export async function updateGoal(goalId, payload) {
+  return await apiPatch(`/wallet/goals/${goalId}`, payload);
+}
+
+// ─── Auto-Save Rules ─────────────────────────────────────────
+
+/** List auto-save rules */
+export async function getAutoSaveRules(token) {
+  return await apiGet('/wallet/auto-save', { token });
+}
+
+/** Create an auto-save rule */
+export async function createAutoSaveRule(payload) {
+  return await apiPost('/wallet/auto-save', payload);
+}
+
+// ─── Health Scores ───────────────────────────────────────────
+
+/** Get health score history */
+export async function getHealthScores(token) {
+  return await apiGet('/wallet/health', { token });
+}
+
+// ─── Settings ────────────────────────────────────────────────
+
+/** Get wallet settings */
+export async function getWalletSettings(token) {
+  return await apiGet('/wallet/settings', { token });
+}
+
+/** Update wallet settings */
+export async function updateWalletSettings(payload) {
+  return await apiPost('/wallet/settings', payload);
 }
 

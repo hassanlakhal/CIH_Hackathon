@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { getAuraSettings, updateAuraSettings } from '../../services/auraService.js';
+import { getWalletSettings, updateWalletSettings } from '../../services/walletService.js';
+import { getStoredUserIdentity } from '../../utils/userIdentity.js';
 import SectionCard from '../ui/SectionCard.jsx';
 import PrimaryButton from '../ui/PrimaryButton.jsx';
 import LoadingState from '../ui/LoadingState.jsx';
@@ -57,13 +58,19 @@ export default function Settings() {
 
   useEffect(() => {
     async function load() {
-      const s = await getAuraSettings();
-      setSettings({
-        safetyFloor: s.safetyFloor || 200,
-        savingsGoal: s.savingsGoal || 5000,
-        savingsEnabled: s.savingsEnabled ?? true,
-        notificationsEnabled: s.notificationsEnabled ?? true,
-      });
+      const identity = getStoredUserIdentity();
+      if (!identity?.token) return;
+      try {
+        const s = await getWalletSettings(identity.token);
+        setSettings({
+          safetyFloor: s.safetyFloor || 0,
+          monthlySavingAmount: s.monthlySavingAmount || 0,
+          savingTriggerBalance: s.savingTriggerBalance || 0,
+          sendToSavingAccount: s.sendToSavingAccount ?? false,
+        });
+      } catch (err) {
+        console.error('Failed to load settings', err);
+      }
       setLoading(false);
     }
     load();
@@ -81,24 +88,27 @@ export default function Settings() {
   };
 
   const handleSave = async () => {
-    // Basic validation
     const floor = parseFloat(settings.safetyFloor);
-    const goal = parseFloat(settings.savingsGoal);
+    const amount = parseFloat(settings.monthlySavingAmount);
+    const trigger = parseFloat(settings.savingTriggerBalance);
 
     if (isNaN(floor) || floor < 0) {
       setError('Safety floor must be a valid positive number.');
       return;
     }
-    if (isNaN(goal) || goal <= 0) {
-      setError('Savings goal must be a valid positive number greater than 0.');
+    if (isNaN(amount) || amount < 0) {
+      setError('Monthly saving amount must be a positive number.');
       return;
     }
 
     setSaving(true);
-    await updateAuraSettings({
-      ...settings,
+    const identity = getStoredUserIdentity();
+    await updateWalletSettings({
+      token: identity.token,
       safetyFloor: floor,
-      savingsGoal: goal,
+      monthlySavingAmount: amount,
+      savingTriggerBalance: trigger,
+      sendToSavingAccount: settings.sendToSavingAccount,
     });
     setSaving(false);
     setSaved(true);
@@ -128,21 +138,20 @@ export default function Settings() {
             onChange={(val) => handleTextChange('safetyFloor', val)}
           />
           <NumberInputRow
-            label="Monthly Savings Goal"
-            value={settings.savingsGoal}
-            onChange={(val) => handleTextChange('savingsGoal', val)}
+            label="Monthly Savings Amount"
+            value={settings.monthlySavingAmount}
+            onChange={(val) => handleTextChange('monthlySavingAmount', val)}
+          />
+          <NumberInputRow
+            label="Saving Trigger Balance"
+            value={settings.savingTriggerBalance}
+            onChange={(val) => handleTextChange('savingTriggerBalance', val)}
           />
           <ToggleRow
-            label="Automatic Invisible Moves"
-            description="Allow Aura to detect save-able micro amounts and move them automatically."
-            checked={settings.savingsEnabled}
-            onChange={() => toggle('savingsEnabled')}
-          />
-          <ToggleRow
-            label="Transparency Notifications"
-            description="Get notified whenever Aura simulates or completes a move on your behalf."
-            checked={settings.notificationsEnabled}
-            onChange={() => toggle('notificationsEnabled')}
+            label="Enable Auto-Save Account"
+            description="Allow system to move funds to your saving account when reaching the trigger balance."
+            checked={settings.sendToSavingAccount}
+            onChange={() => toggle('sendToSavingAccount')}
           />
         </SectionCard>
       </div>

@@ -129,7 +129,6 @@ export default function SurveyPage() {
           setSurveyData(prev => ({
             ...prev,
             ...res.data,
-            phoneNumber
           }));
         }
       } catch (err) {
@@ -139,7 +138,7 @@ export default function SurveyPage() {
       }
     };
     init();
-  }, [phoneNumber]);
+  }, [token]);
 
   const handleUpdate = (field, value) => {
     setSurveyData(prev => ({ ...prev, [field]: value }));

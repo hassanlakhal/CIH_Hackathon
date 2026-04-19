@@ -43,6 +43,41 @@ const NAV_ITEMS = [
       </svg>
     ),
   },
+  {
+    to: '/goals',
+    label: 'Goals',
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 8v4" />
+        <path d="M12 16h.01" />
+      </svg>
+    ),
+  },
+  {
+    to: '/insights',
+    label: 'Insights',
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2 20h20" />
+        <path d="M5 20V4" />
+        <path d="M11 20v-8" />
+        <path d="M17 20v-4" />
+        <path d="M5 4l6 6" />
+        <path d="M11 10l6-4" />
+        <path d="M17 6l6 6" />
+      </svg>
+    ),
+  },
+  {
+    to: '/health',
+    label: 'Health',
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M20.42 4.58a5.4 5.4 0 0 0-7.65 0l-.77.78-.77-.78a5.4 5.4 0 0 0-7.65 0C1.46 6.7 1.33 10.28 4 13l8 8 8-8c2.67-2.72 2.54-6.3.42-8.42z" />
+      </svg>
+    ),
+  },
 ];
 
 export default function BottomNav() {
