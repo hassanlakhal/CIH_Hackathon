@@ -179,7 +179,7 @@ function WalletOperationCard({ op }) {
         </div>
         <div className="text-right flex flex-col items-end gap-1.5">
           <span className={`text-sm font-bold flex-shrink-0 ${isCredit ? 'text-success-600' : 'text-surface-900'}`}>
-            {isCredit ? '+' : '-'}{formatCurrency(Math.abs(op.amount))}
+            {isCredit ? '+ ' : ''}{formatCurrency(Math.abs(op.amount))}
           </span>
           <StatusBadge status={op.status === 'completed' ? 'completed' : 'pending'} label={op.status} />
         </div>

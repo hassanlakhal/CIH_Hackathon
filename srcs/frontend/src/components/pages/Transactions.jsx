@@ -11,7 +11,7 @@ import StatusBadge from '../ui/StatusBadge.jsx';
 
 const ACTIONS = [
   { id: 'cash-in', label: 'Cash In', icon: '📥', color: 'bg-emerald-50 text-emerald-600' },
-  { id: 'cash-out', label: 'Cash Out', icon: '📤', color: 'bg-blue-50 text-blue-600' },
+  { id: 'cash-out', label: 'Cash Out', icon: '📤', color: 'bgblue-50 text-blue-600' },
   { id: 'wallet-to-wallet', label: 'Send to Wallet', icon: '📲', color: 'bg-accent-50 text-accent' },
   { id: 'transfer', label: 'Bank Transfer', icon: '🏦', color: 'bg-purple-50 text-purple-600' },
   { id: 'atm', label: 'ATM Withdraw', icon: '🏧', color: 'bg-orange-50 text-orange-600' },
@@ -114,7 +114,7 @@ export default function Transactions() {
               // Basic logic to determine if it's a deposit or withdrawal based on type
               // W2M, ATM, CASH_OUT, TT (W2W out) are usually debits. CASH_IN is credit.
               const isCredit = op.type === 'CASH_IN' || op.isTierCashIn;
-              const sign = isCredit ? '+' : '-';
+              const sign = isCredit ? '+' : '';
               
               return (
                 <div key={`${op.referenceId}-${i}`} className="flex items-center justify-between py-3 px-2 border-b border-surface-100 last:border-b-0 hover:bg-surface-50 rounded-lg transition-colors">

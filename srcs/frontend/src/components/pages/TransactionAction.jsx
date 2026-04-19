@@ -208,7 +208,7 @@ export default function TransactionAction() {
     return (
       <TransactionFlow
         title="Cash Out"
-        requiresOtp={true}
+        requiresOtp={false}
         onCancel={handleCancel}
         renderForm={(onSubmit, isSubmitting) => <CashOutForm onSubmit={onSubmit} isSubmitting={isSubmitting} phone={phone} />}
         onSimulate={api.simulateCashOut}
@@ -237,7 +237,7 @@ export default function TransactionAction() {
     return (
       <TransactionFlow
         title="Send to Wallet"
-        requiresOtp={true}
+        requiresOtp={false}
         onCancel={handleCancel}
         renderForm={(onSubmit, isSubmitting) => <W2WForm onSubmit={onSubmit} isSubmitting={isSubmitting} contractId={contractId} phone={phone} />}
         onSimulate={api.simulateW2W}
@@ -277,7 +277,7 @@ export default function TransactionAction() {
     return (
       <TransactionFlow
         title="Bank Transfer"
-        requiresOtp={true}
+        requiresOtp={false}
         onCancel={handleCancel}
         renderForm={(onSubmit, isSubmitting) => <TransferForm onSubmit={onSubmit} isSubmitting={isSubmitting} contractId={contractId} phone={phone} />}
         onSimulate={api.simulateTransfer}
@@ -321,7 +321,7 @@ export default function TransactionAction() {
     return (
       <TransactionFlow
         title="ATM Withdrawal"
-        requiresOtp={true}
+        requiresOtp={false}
         onCancel={handleCancel}
         renderForm={(onSubmit, isSubmitting) => <AtmForm onSubmit={onSubmit} isSubmitting={isSubmitting} contractId={contractId} />}
         onSimulate={api.simulateAtm}
@@ -360,7 +360,7 @@ export default function TransactionAction() {
     return (
       <TransactionFlow
         title="Pay Merchant"
-        requiresOtp={true}
+        requiresOtp={false}
         onCancel={handleCancel}
         renderForm={(onSubmit, isSubmitting) => <W2MForm onSubmit={onSubmit} isSubmitting={isSubmitting} contractId={contractId} phone={phone} />}
         onSimulate={api.simulateW2M}

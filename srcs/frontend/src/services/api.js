@@ -3,8 +3,52 @@
  * Uses VITE_API_BASE_URL environment variable or a placeholder fallback.
  */
 
+import { getStoredUserIdentity } from '../utils/userIdentity.js';
+
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL;
+
+let authCheckPromise = null;
+
+async function performAuthCheck(path) {
+  // Routes to skip token checking
+  if (
+    path.includes('wallet/checker') ||
+    path.match(/^\/?wallet\/?(\?.*)?$/) ||
+    path.includes('wallet/clientinfo') ||
+    window.location.pathname === '/onboarding'
+  ) {
+    return true;
+  }
+
+  const token = getStoredUserIdentity()?.token;
+  if (!token) {
+    window.location.href = '/onboarding';
+    throw new Error('Unauthorized');
+  }
+
+  if (!authCheckPromise) {
+    authCheckPromise = (async () => {
+      try {
+        const url = buildUrl('wallet/checker');
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token })
+        });
+        if (!res.ok) {
+          window.location.href = '/onboarding';
+          throw new Error('Unauthorized');
+        }
+        return true;
+      } finally {
+        setTimeout(() => { authCheckPromise = null; }, 2000); // cache success for 2 seconds to throttle
+      }
+    })();
+  }
+  
+  return authCheckPromise;
+}
 
 /**
  * Build a URL with query parameters.
@@ -33,6 +77,7 @@ function buildUrl(path, params = {}) {
  * @returns {Promise<object>} Parsed JSON response.
  */
 export async function apiGet(path, params = {}) {
+  await performAuthCheck(path);
   const url = buildUrl(path, params);
 
   const response = await fetch(url, {
@@ -87,6 +132,7 @@ export async function apiGet(path, params = {}) {
  * @returns {Promise<object>} Parsed JSON response.
  */
 export async function apiPost(path, body = {}, params = {}) {
+  await performAuthCheck(path);
   const url = buildUrl(path, params);
 
   const response = await fetch(url, {

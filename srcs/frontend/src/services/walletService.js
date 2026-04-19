@@ -63,10 +63,10 @@ export function getClientInfo(payload) {
 // ─── Survey Endpoints ────────────────────────────────────────────────────────
 
 /**
- * Fetch survey data and status for a given phone number.
+ * Fetch survey data and status for a given token.
  */
-export async function getSurvey(phoneNumber) {
-  return await apiGet('/wallet/survey', { phoneNumber });
+export async function getSurvey(token) {
+  return await apiGet('/wallet/survey', { token });
 }
 
 /**

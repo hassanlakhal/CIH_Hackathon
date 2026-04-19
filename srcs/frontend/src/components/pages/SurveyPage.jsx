@@ -86,7 +86,7 @@ function SurveyStep({ title, subtitle, icon, children }) {
 export default function SurveyPage() {
   const navigate = useNavigate();
   const identity = getStoredUserIdentity();
-  const phoneNumber = identity?.phoneNumber;
+  const token = identity?.token;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -97,7 +97,6 @@ export default function SurveyPage() {
   const totalSteps = 5;
 
   const [surveyData, setSurveyData] = useState({
-    phoneNumber: phoneNumber || '',
     digitalPlatforms: 0,
     rent: 0,
     groceries: 0,
@@ -113,15 +112,15 @@ export default function SurveyPage() {
   });
 
   useEffect(() => {
-    if (!phoneNumber) {
-      setError("No registered phone number found. Please sign up first.");
+    if (!token) {
+      setError("No token found. Please sign up first.");
       setLoading(false);
       return;
     }
 
     const init = async () => {
       try {
-        const res = await getSurvey(phoneNumber);
+        const res = await getSurvey(token);
         // "if isSurveyNeed = true: prefill values allow user to update... if false: start empty"
         // Wait, normally if false they wouldn't need it. But per prompt: "if false: start empty survey"
         // Note: The prompt means if they already filled it, we could prefill it. If it returns data, we prefil.
@@ -153,7 +152,13 @@ export default function SurveyPage() {
     setSubmitting(true);
     setError(null);
     try {
-      await submitSurvey(surveyData);
+      // The backend expects 'token' in the body instead of 'phoneNumber'
+      const { phoneNumber: _, ...restData } = surveyData;
+      const payload = {
+        ...restData,
+        token: identity?.token || ''
+      };
+      await submitSurvey(payload);
       setCompleted(true);
     } catch (err) {
       setError(err.message || "Failed to save your survey.");
