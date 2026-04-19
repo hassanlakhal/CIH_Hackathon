@@ -25,6 +25,15 @@ const NAV_ITEMS = [
     ),
   },
   {
+    to: '/transactions',
+    label: 'Transactions',
+    icon: (
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+      </svg>
+    ),
+  },
+  {
     to: '/settings',
     label: 'Réglages',
     icon: (
@@ -48,7 +57,7 @@ export default function BottomNav() {
             className={({ isActive }) =>
               `flex flex-col items-center gap-0.5 px-4 py-2 rounded-xl transition-all duration-200 min-w-[64px] ${
                 isActive
-                  ? 'text-aura-600 bg-aura-50'
+                  ? 'text-primary-600 bg-primary-50'
                   : 'text-surface-400 hover:text-surface-600 hover:bg-surface-50'
               }`
             }

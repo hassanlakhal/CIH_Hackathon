@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { activateWallet } from '../../services/walletService.js';
+import { updateStoredUserIdentity, setAuraContractId } from '../../utils/userIdentity.js';
 import PrimaryButton from '../ui/PrimaryButton.jsx';
 import StatusBadge from '../ui/StatusBadge.jsx';
 
@@ -50,12 +51,17 @@ export default function WalletActivation() {
 
       // Store new data
       if (response?.result) {
+        const updates = {};
         if (response.result.contractId) {
-          localStorage.setItem('aura_contract_id', response.result.contractId);
+          setAuraContractId(response.result.contractId);
+          updates.contractId = response.result.contractId;
         }
         if (response.result.rib) {
           localStorage.setItem('aura_rib', response.result.rib);
+          updates.rib = response.result.rib;
         }
+        // Merge into structured identity store
+        updateStoredUserIdentity(updates);
       }
 
       setDone(true);
@@ -113,7 +119,7 @@ export default function WalletActivation() {
       <div className="max-w-lg mx-auto px-5 py-8">
         {/* Illustration */}
         <div className="flex flex-col items-center text-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-aura-50 border border-aura-100 flex items-center justify-center text-3xl mb-4">
+          <div className="w-16 h-16 rounded-2xl bg-primary-50 border border-primary-100 flex items-center justify-center text-3xl mb-4">
             🔐
           </div>
           <h1 className="text-xl font-bold text-surface-900 tracking-tight mb-2">
@@ -144,7 +150,7 @@ export default function WalletActivation() {
               Please{' '}
               <button
                 onClick={() => navigate('/onboarding')}
-                className="text-aura-600 font-semibold underline"
+                className="text-primary-600 font-semibold underline"
               >
                 complete onboarding
               </button>
@@ -177,7 +183,7 @@ export default function WalletActivation() {
                   w-full px-4 py-3 text-center text-2xl font-bold tracking-[0.5em]
                   rounded-xl border bg-white outline-none transition-all duration-200
                   placeholder:text-surface-200 placeholder:tracking-[0.3em]
-                  focus:ring-2 focus:ring-aura-500/20 focus:border-aura-500
+                  focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500
                   ${error ? 'border-danger-400 bg-danger-50/30' : 'border-surface-200'}
                 `}
               />

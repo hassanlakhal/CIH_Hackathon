@@ -12,6 +12,7 @@
     margin: 0;
     min-height: 100dvh;
     overflow-x: hidden;
+    @apply bg-surface-50 text-surface-900;
   }
 
   /* Scrollbar styling for desktop */
@@ -56,5 +57,13 @@
 
   .safe-top {
     padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .bg-gradient-primary {
+    @apply bg-gradient-to-r from-primary to-primary-light text-white;
+  }
+
+  .bg-gradient-accent {
+    @apply bg-gradient-to-r from-accent-dark to-accent text-white;
   }
 }

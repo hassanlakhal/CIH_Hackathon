@@ -9,6 +9,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { precreateWallet } from '../../services/walletService.js';
+import { saveStoredUserIdentity } from '../../utils/userIdentity.js';
 import PrimaryButton from '../ui/PrimaryButton.jsx';
 
 // ─── Field definitions ──────────────────────────────────────
@@ -130,7 +131,7 @@ const FIELD_SECTIONS = [
 
 // ─── Build initial form state from field definitions ────────
 function buildInitialState() {
-  const state = {};
+  const state = { countryCode: '212' };
   FIELD_SECTIONS.forEach((section) =>
     section.fields.forEach((f) => {
       state[f.name] = '';
@@ -152,9 +153,9 @@ function validate(form) {
     })
   );
 
-  // Phone format
-  if (form.phoneNumber && !/^\d{9,15}$/.test(form.phoneNumber.trim())) {
-    errors.phoneNumber = 'Enter a valid phone number (digits only, 9–15 characters)';
+  // Phone format (9 digits for local portion)
+  if (form.phoneNumber && !/^\d{9}$/.test(form.phoneNumber.trim())) {
+    errors.phoneNumber = 'Enter a valid 9-digit phone number';
   }
 
   // Email format
@@ -183,7 +184,7 @@ function FormField({ field, value, error, touched, onChange, onBlur }) {
     w-full px-3.5 py-2.5 text-sm rounded-xl border bg-white
     outline-none transition-all duration-200
     placeholder:text-surface-300
-    focus:ring-2 focus:ring-aura-500/20 focus:border-aura-500
+    focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500
     ${error && touched
       ? 'border-danger-400 bg-danger-50/30'
       : 'border-surface-200 hover:border-surface-300'
@@ -306,7 +307,7 @@ export default function Onboarding() {
 
     // Build payload with official field names
     const payload = {
-      phoneNumber: form.phoneNumber.trim(),
+      phoneNumber: '+' + form.countryCode + form.phoneNumber.trim(),
       phoneOperator: form.phoneOperator,
       clientFirstName: form.clientFirstName.trim(),
       clientLastName: form.clientLastName.trim(),
@@ -331,6 +332,17 @@ export default function Onboarding() {
         // In production the OTP is sent via SMS; for demo we store it
         localStorage.setItem('aura_precreate_otp', response.result.otp);
       }
+
+      // Persist identity fields for later use by POST /wallet/clientinfo
+      // Maps: legalType → identificationType, legalId → identificationNumber
+      saveStoredUserIdentity({
+        phoneNumber: payload.phoneNumber,
+        identificationType: form.legalType,
+        identificationNumber: form.legalId.trim(),
+        firstName: form.clientFirstName.trim(),
+        lastName: form.clientLastName.trim(),
+        token: response?.result?.token || '',
+      });
 
       navigate('/wallet-activation');
     } catch (err) {
@@ -360,18 +372,13 @@ export default function Onboarding() {
       {/* ─── Sticky header ──────────────────────────── */}
       <div className="sticky top-0 z-20 bg-white/90 backdrop-blur-lg border-b border-surface-100">
         <div className="max-w-lg mx-auto px-5 py-3 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-aura-500 to-aura-700 flex items-center justify-center shadow-sm flex-shrink-0">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" className="text-white">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"
-                stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
-          <span className="text-base font-bold text-surface-900 tracking-tight">Aura</span>
+          <img src="/logo.png" alt="MindSave" className="w-10 h-10 rounded-xl object-contain flex-shrink-0" />
+          <span className="text-base font-bold text-surface-900 tracking-tight">MindSave</span>
         </div>
         {/* Progress bar */}
         <div className="h-1 bg-surface-100">
           <div
-            className="h-full bg-gradient-to-r from-aura-500 to-aura-400 transition-all duration-500 ease-out rounded-r-full"
+            className="h-full bg-gradient-primary transition-all duration-500 ease-out rounded-r-full"
             style={{ width: `${progressPct}%` }}
           />
         </div>
@@ -401,7 +408,7 @@ export default function Onboarding() {
           </div>
           <div className="flex items-center gap-1.5 text-xs text-surface-400">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-aura-500">
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary-500">
               <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
               <path d="M7 11V7a5 5 0 0110 0v4" />
             </svg>
@@ -409,7 +416,7 @@ export default function Onboarding() {
           </div>
           <div className="flex items-center gap-1.5 text-xs text-surface-400">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-aura-500">
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary-500">
               <path d="M22 11.08V12a10 10 0 11-5.93-9.14" />
               <polyline points="22 4 12 14.01 9 11.01" />
             </svg>
@@ -423,17 +430,65 @@ export default function Onboarding() {
             <div key={section.title} className={sIdx > 0 ? 'mt-7' : ''}>
               <h2 className="section-title mb-4">{section.title}</h2>
               <div className="card p-4 space-y-4">
-                {section.fields.map((field) => (
-                  <FormField
-                    key={field.name}
-                    field={field}
-                    value={form[field.name]}
-                    error={errors[field.name]}
-                    touched={touched[field.name]}
-                    onChange={handleChange}
-                    onBlur={handleBlur}
-                  />
-                ))}
+                {section.fields.map((field) => {
+                  if (field.name === 'phoneNumber') {
+                    return (
+                      <div key={field.name}>
+                        <label className="block text-sm font-medium text-surface-700 mb-1.5">
+                          {field.label} <span className="text-danger-400 ml-0.5">*</span>
+                        </label>
+                        <div className="flex gap-2">
+                          <select
+                            name="countryCode"
+                            value={form.countryCode}
+                            onChange={handleChange}
+                            className="w-[110px] px-3.5 py-2.5 text-sm rounded-xl border bg-white outline-none border-surface-200 text-surface-900 focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                          >
+                            <option value="212">+212 (MA)</option>
+                            <option value="33">+33 (FR)</option>
+                            <option value="1">+1 (US/CA)</option>
+                            <option value="44">+44 (UK)</option>
+                            <option value="34">+34 (ES)</option>
+                            <option value="971">+971 (AE)</option>
+                          </select>
+                          <div className="flex-1">
+                            <input
+                              name="phoneNumber"
+                              type="tel"
+                              value={form.phoneNumber}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/\D/g, '');
+                                handleChange({ target: { name: 'phoneNumber', value: val } });
+                              }}
+                              onBlur={handleBlur}
+                              placeholder="612345678"
+                              maxLength={9}
+                              autoComplete="tel-national"
+                              className={`w-full px-3.5 py-2.5 text-sm rounded-xl border bg-white outline-none transition-all duration-200 placeholder:text-surface-300 focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 ${errors.phoneNumber && touched.phoneNumber ? 'border-danger-400 bg-danger-50/30' : 'border-surface-200 hover:border-surface-300'} text-surface-900`}
+                            />
+                          </div>
+                        </div>
+                        {errors.phoneNumber && touched.phoneNumber && (
+                          <p className="mt-1 text-xs text-danger-500 flex items-center gap-1">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            {errors.phoneNumber}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  }
+                  return (
+                    <FormField
+                      key={field.name}
+                      field={field}
+                      value={form[field.name]}
+                      error={errors[field.name]}
+                      touched={touched[field.name]}
+                      onChange={handleChange}
+                      onBlur={handleBlur}
+                    />
+                  );
+                })}
               </div>
             </div>
           ))}
@@ -463,9 +518,9 @@ export default function Onboarding() {
             </PrimaryButton>
             <p className="text-center text-xs text-surface-400 mt-3 leading-relaxed">
               By continuing, you agree to Aura&apos;s{' '}
-              <span className="text-aura-600 font-medium">Terms of Service</span>
+              <span className="text-primary-600 font-medium">Terms of Service</span>
               {' '}and{' '}
-              <span className="text-aura-600 font-medium">Privacy Policy</span>.
+              <span className="text-primary-600 font-medium">Privacy Policy</span>.
             </p>
           </div>
         </form>

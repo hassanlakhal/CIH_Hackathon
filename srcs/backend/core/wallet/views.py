@@ -41,6 +41,7 @@ def wallet_create(request):
     state = request.query_params.get('state', '').strip()
 
     if state == 'precreate':
+        print(f'\n\n{request.data=}\n\n')
         return _wallet_precreate(request)
     elif state == 'activate':
         return _wallet_activate(request)

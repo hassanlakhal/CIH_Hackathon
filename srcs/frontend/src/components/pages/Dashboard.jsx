@@ -2,8 +2,12 @@
  * Dashboard — main landing page showing savings summary,
  * goal progress, predicted expenses, and recent invisible moves.
  */
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useDashboardData } from '../../hooks/useDashboardData.js';
+import { getClientInfo } from '../../services/walletService.js';
+import { getWalletBalance } from '../../services/transactionService.js';
+import { getStoredUserIdentity, updateStoredUserIdentity, getAuraContractId, setAuraContractId } from '../../utils/userIdentity.js';
 import { formatCurrency, formatCurrencyCompact } from '../../utils/formatCurrency.js';
 import { formatRelativeTime, formatDate } from '../../utils/formatDate.js';
 import StatCard from '../ui/StatCard.jsx';
@@ -13,11 +17,106 @@ import EmptyState from '../ui/EmptyState.jsx';
 import PrimaryButton from '../ui/PrimaryButton.jsx';
 
 export default function Dashboard() {
-  const { data, loading, error, refetch } = useDashboardData();
+  const { data, loading, error, noContract, refetch } = useDashboardData();
   const navigate = useNavigate();
+
+  const [realBalance, setRealBalance] = useState(null);
+  const [balanceLoading, setBalanceLoading] = useState(true);
+  const [balanceError, setBalanceError] = useState(null);
+
+  // Client info state
+  const [clientInfo, setClientInfo] = useState(null);
+  const [clientInfoLoading, setClientInfoLoading] = useState(true);
+
+  // ─── Fetch real wallet balance ────────────────────────
+  useEffect(() => {
+    const cid = getAuraContractId();
+    if (!cid) {
+      setBalanceError('Activate wallet');
+      setBalanceLoading(false);
+      return;
+    }
+    
+    setBalanceLoading(true);
+    setBalanceError(null);
+    getWalletBalance(cid)
+      .then(res => {
+        if (res?.result?.balance?.[0]?.value) {
+          const rawValue = res.result.balance[0].value;
+          const numericVal = parseFloat(rawValue.replace(',', '.'));
+          setRealBalance(numericVal);
+        } else {
+          setBalanceError('Unavailable');
+        }
+      })
+      .catch(() => {
+        setBalanceError('Disconnected');
+      })
+      .finally(() => {
+        setBalanceLoading(false);
+      });
+  }, []);
+
+  // ─── Fetch client info ────────────────────────────────
+  useEffect(() => {
+    const identity = getStoredUserIdentity();
+    if (!identity?.phoneNumber || !identity?.identificationType || !identity?.identificationNumber) {
+      setClientInfoLoading(false);
+      return;
+    }
+
+    setClientInfoLoading(true);
+    getClientInfo({
+      phoneNumber: identity.phoneNumber,
+      identificationType: identity.identificationType,
+      identificationNumber: identity.identificationNumber,
+    })
+      .then(res => {
+        if (res?.result) {
+          setClientInfo(res.result);
+          // Sync contractId/rib from products[0] if not already stored
+          const product = res.result.products?.[0];
+          if (product) {
+            const updates = {};
+            if (product.contractId && !identity.contractId) {
+              updates.contractId = product.contractId;
+              setAuraContractId(product.contractId);
+            }
+            if (product.rib && !identity.rib) {
+              updates.rib = product.rib;
+              localStorage.setItem('aura_rib', product.rib);
+            }
+            if (Object.keys(updates).length > 0) {
+              updateStoredUserIdentity(updates);
+            }
+          }
+        }
+      })
+      .catch(err => {
+        console.warn('[Dashboard] clientInfo fetch failed:', err);
+      })
+      .finally(() => {
+        setClientInfoLoading(false);
+      });
+  }, []);
 
   if (loading) {
     return <LoadingState message="Preparing your dashboard…" />;
+  }
+
+  // ─── No contract ID → onboarding CTA ─────────────────
+  if (noContract) {
+    return (
+      <div className="px-5 py-12">
+        <EmptyState
+          icon="🪪"
+          title="Wallet not activated yet"
+          message="Complete onboarding to view your account data and start saving."
+          actionLabel="Set up wallet"
+          onAction={() => navigate('/onboarding')}
+        />
+      </div>
+    );
   }
 
   if (error) {
@@ -36,24 +135,58 @@ export default function Dashboard() {
 
   const { metrics, invisibleMoves, predictions, settings } = data;
 
+  // Derive display name from client info or stored identity
+  const identity = getStoredUserIdentity();
+  const displayName = clientInfo
+    ? `${clientInfo.tierFirstName || ''} ${clientInfo.tierLastName || ''}`.trim()
+    : identity
+      ? `${identity.firstName || ''} ${identity.lastName || ''}`.trim()
+      : '';
+
   return (
     <div className="px-4 space-y-5 animate-slide-up">
       {/* ─── Greeting ─────────────────────────────────── */}
       <div className="pt-2">
-        <p className="text-surface-400 text-sm font-medium">Hello, Yassine 👋</p>
+        <p className="text-surface-400 text-sm font-medium">
+          Hello{displayName ? `, ${displayName}` : ''} 👋
+        </p>
         <p className="text-xs text-surface-300 mt-0.5">
           Aura is working in the background for you.
         </p>
       </div>
 
+      {/* ─── Client info card ─────────────────────────── */}
+      {clientInfo && (
+        <div className="card p-4 border border-surface-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-primary-50 border border-primary-100 flex items-center justify-center text-lg">
+              👤
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-surface-900 truncate">
+                {displayName || 'Account holder'}
+              </p>
+              <p className="text-xs text-surface-400 truncate">
+                {clientInfo.phoneNumber || ''}{clientInfo.products?.[0]?.provider ? ` · ${clientInfo.products[0].provider.trim()}` : ''}
+              </p>
+            </div>
+            {clientInfo.products?.[0]?.name && (
+              <span className="text-[10px] font-semibold text-primary bg-primary-50 px-2 py-0.5 rounded-md uppercase tracking-wide flex-shrink-0">
+                {clientInfo.products[0].name}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ─── Savings goal card ─────────────────────── */}
-      <div className="card p-5 bg-gradient-to-br from-aura-600 to-aura-800 border-0 text-white relative overflow-hidden">
+      <div className="card p-5 bg-gradient-primary border-0 text-white relative overflow-hidden">
         {/* Background decoration */}
         <div className="absolute -top-8 -right-8 w-32 h-32 bg-white/5 rounded-full" />
         <div className="absolute -bottom-10 -left-6 w-24 h-24 bg-white/5 rounded-full" />
 
         <div className="relative z-10">
-          <p className="text-aura-200 text-xs font-semibold uppercase tracking-wider mb-1">
+          <p className="text-primary-100 text-xs font-semibold uppercase tracking-wider mb-1">
             Total Saved
           </p>
           <p className="text-3xl font-bold tracking-tight">
@@ -68,7 +201,7 @@ export default function Dashboard() {
           {/* Goal progress bar */}
           <div className="mt-4">
             <div className="flex justify-between text-xs mb-1.5">
-              <span className="text-aura-200">Progress</span>
+              <span className="text-primary-100">Progress</span>
               <span className="text-white font-semibold">
                 {Math.round(metrics.goalProgress * 100)}%
               </span>
@@ -85,11 +218,25 @@ export default function Dashboard() {
 
       {/* ─── Top summary grid ─────────────────────────── */}
       <div className="grid grid-cols-2 gap-3">
-        <StatCard
-          label="Current Balance"
-          value={formatCurrency(metrics.currentBalance)}
-          icon="💳"
-        />
+        <div className="card p-4 space-y-1 relative border border-surface-200">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs font-semibold text-surface-500 uppercase tracking-widest">
+              Current Balance
+            </p>
+            <span className="text-lg">💳</span>
+          </div>
+          {balanceLoading ? (
+            <div className="h-7 w-24 bg-surface-200 animate-pulse rounded mt-1" />
+          ) : balanceError ? (
+            <p className="text-xs text-danger-500 font-medium leading-tight mt-1">
+              {balanceError}
+            </p>
+          ) : (
+            <p className="text-2xl font-black text-surface-900 tracking-tight mt-1">
+              {formatCurrency(realBalance ?? 0)}
+            </p>
+          )}
+        </div>
         <StatCard
           label="Safety Floor"
           value={formatCurrency(metrics.safetyFloor)}
@@ -132,7 +279,7 @@ export default function Dashboard() {
                 className="flex items-center justify-between py-2 border-b border-surface-100 last:border-0"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-aura-50 flex items-center justify-center text-base">
+                  <div className="w-9 h-9 rounded-xl bg-primary-50 flex items-center justify-center text-base">
                     🌀
                   </div>
                   <div>
@@ -145,7 +292,7 @@ export default function Dashboard() {
                     </p>
                   </div>
                 </div>
-                <span className="text-sm font-semibold text-aura-700">
+                <span className="text-sm font-semibold text-primary-dark">
                   {formatCurrency(Math.abs(move.amount))}
                 </span>
               </div>

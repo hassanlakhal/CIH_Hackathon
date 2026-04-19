@@ -18,7 +18,7 @@ export default function SectionCard({
           {action && (
             <button
               onClick={onAction}
-              className="text-xs font-semibold text-aura-600 hover:text-aura-700 transition-colors"
+              className="text-xs font-semibold text-primary hover:text-primary-dark transition-colors"
             >
               {action}
             </button>

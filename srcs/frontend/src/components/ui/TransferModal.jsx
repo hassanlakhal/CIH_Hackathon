@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { simulateBankTransfer, sendTransferOtp, confirmBankTransfer } from '../../services/walletService.js';
+import { simulateTransfer, requestTransferOtp, confirmTransfer } from '../../services/transactionService.js';
 import PrimaryButton from './PrimaryButton.jsx';
 import { formatCurrency } from '../../utils/formatCurrency.js';
 
@@ -48,7 +48,7 @@ export default function TransferModal({
         mobileNumber,
         RIB: rib
       };
-      const res = await simulateBankTransfer(payload);
+      const res = await simulateTransfer(payload);
       // Map exact officially defined fields from result[0]
       const data = res?.result?.[0] || {};
       setSimulationData({
@@ -72,7 +72,7 @@ export default function TransferModal({
     setLoading(true);
     setError(null);
     try {
-      await sendTransferOtp({ PhoneNumber: mobileNumber });
+      await requestTransferOtp({ PhoneNumber: mobileNumber });
       setStep('otp');
     } catch (err) {
       setError(err.message || 'Failed to send OTP.');
@@ -102,7 +102,7 @@ export default function TransferModal({
         DestinationFirstName: destinationFirstName,
         DestinationLastName: destinationLastName
       };
-      await confirmBankTransfer(payload);
+      await confirmTransfer(payload);
       setStep('success');
     } catch (err) {
       setError(err.message || 'Transfer failed.');
@@ -161,7 +161,7 @@ export default function TransferModal({
               </p>
               <div className="bg-surface-50 p-4 rounded-2xl border border-surface-100 flex justify-between items-center">
                 <span className="text-sm font-bold text-surface-500 uppercase tracking-widest">Amount</span>
-                <span className="text-2xl font-black text-aura-800">{formatCurrency(amount)}</span>
+                <span className="text-2xl font-black text-primary-800">{formatCurrency(amount)}</span>
               </div>
             </div>
           )}
@@ -197,7 +197,7 @@ export default function TransferModal({
 
           {step === 'otp' && (
             <div className="py-4 space-y-6 animate-fade-in flex flex-col items-center text-center">
-              <div className="w-14 h-14 rounded-full bg-aura-50 flex items-center justify-center text-xl mb-2">
+              <div className="w-14 h-14 rounded-full bg-primary-50 flex items-center justify-center text-xl mb-2">
                 🔐
               </div>
               <div>
@@ -213,7 +213,7 @@ export default function TransferModal({
                 maxLength="6"
                 value={otp}
                 onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
-                className="w-48 text-center text-2xl font-black tracking-[0.5em] bg-surface-50 border border-surface-200 rounded-xl py-3 text-aura-900 focus:outline-none focus:ring-2 focus:ring-aura-500 placeholder-surface-300 transition-shadow"
+                className="w-48 text-center text-2xl font-black tracking-[0.5em] bg-surface-50 border border-surface-200 rounded-xl py-3 text-primary-900 focus:outline-none focus:ring-2 focus:ring-primary-500 placeholder-surface-300 transition-shadow"
               />
             </div>
           )}

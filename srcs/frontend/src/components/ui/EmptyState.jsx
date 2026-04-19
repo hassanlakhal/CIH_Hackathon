@@ -22,7 +22,7 @@ export default function EmptyState({
       {actionLabel && onAction && (
         <button
           onClick={onAction}
-          className="mt-2 text-sm font-semibold text-aura-600 hover:text-aura-700 transition-colors"
+          className="mt-2 text-sm font-semibold text-primary hover:text-primary-dark transition-colors"
         >
           {actionLabel}
         </button>

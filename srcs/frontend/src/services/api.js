@@ -3,8 +3,52 @@
  * Uses VITE_API_BASE_URL environment variable or a placeholder fallback.
  */
 
+import { getStoredUserIdentity } from '../utils/userIdentity.js';
+
 export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL;
+
+let authCheckPromise = null;
+
+async function performAuthCheck(path) {
+  // Routes to skip token checking
+  if (
+    path.includes('wallet/checker') ||
+    path.match(/^\/?wallet\/?(\?.*)?$/) ||
+    path.includes('wallet/clientinfo') ||
+    window.location.pathname === '/onboarding'
+  ) {
+    return true;
+  }
+
+  const token = getStoredUserIdentity()?.token;
+  if (!token) {
+    window.location.href = '/onboarding';
+    throw new Error('Unauthorized');
+  }
+
+  if (!authCheckPromise) {
+    authCheckPromise = (async () => {
+      try {
+        const url = buildUrl('wallet/checker');
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token })
+        });
+        if (!res.ok) {
+          window.location.href = '/onboarding';
+          throw new Error('Unauthorized');
+        }
+        return true;
+      } finally {
+        setTimeout(() => { authCheckPromise = null; }, 2000); // cache success for 2 seconds to throttle
+      }
+    })();
+  }
+  
+  return authCheckPromise;
+}
 
 /**
  * Build a URL with query parameters.
@@ -33,6 +77,7 @@ function buildUrl(path, params = {}) {
  * @returns {Promise<object>} Parsed JSON response.
  */
 export async function apiGet(path, params = {}) {
+  await performAuthCheck(path);
   const url = buildUrl(path, params);
 
   const response = await fetch(url, {
@@ -44,7 +89,34 @@ export async function apiGet(path, params = {}) {
   });
 
   if (!response.ok) {
-    const error = new Error(`GET ${path} failed: ${response.status}`);
+    let errorMsg = `GET ${path} failed: ${response.status}`;
+    try {
+      const rawText = await response.text();
+      try {
+        const errBody = JSON.parse(rawText);
+        
+        // Priority fields commonly used by APIs
+        if (errBody.message) errorMsg = errBody.message;
+        else if (errBody.error) errorMsg = errBody.error;
+        else if (errBody.detail) errorMsg = errBody.detail;
+        else if (typeof errBody === 'object' && errBody !== null) {
+          // e.g. Django {"otp": ["Invalid OTP"]}
+          const values = Object.values(errBody).flat();
+          if (values.length > 0 && typeof values[0] === 'string') {
+            errorMsg = values.join(', ');
+          } else {
+            errorMsg = rawText;
+          }
+        } else {
+          errorMsg = rawText;
+        }
+      } catch {
+        if (rawText) errorMsg = rawText;
+      }
+    } catch (e) {
+      // Ignore
+    }
+    const error = new Error(errorMsg);
     error.status = response.status;
     throw error;
   }
@@ -60,6 +132,7 @@ export async function apiGet(path, params = {}) {
  * @returns {Promise<object>} Parsed JSON response.
  */
 export async function apiPost(path, body = {}, params = {}) {
+  await performAuthCheck(path);
   const url = buildUrl(path, params);
 
   const response = await fetch(url, {
@@ -72,7 +145,32 @@ export async function apiPost(path, body = {}, params = {}) {
   });
 
   if (!response.ok) {
-    const error = new Error(`POST ${path} failed: ${response.status}`);
+    let errorMsg = `POST ${path} failed: ${response.status}`;
+    try {
+      const rawText = await response.text();
+      try {
+        const errBody = JSON.parse(rawText);
+        
+        if (errBody.message) errorMsg = errBody.message;
+        else if (errBody.error) errorMsg = errBody.error;
+        else if (errBody.detail) errorMsg = errBody.detail;
+        else if (typeof errBody === 'object' && errBody !== null) {
+          const values = Object.values(errBody).flat();
+          if (values.length > 0 && typeof values[0] === 'string') {
+            errorMsg = values.join(', ');
+          } else {
+            errorMsg = rawText;
+          }
+        } else {
+          errorMsg = rawText;
+        }
+      } catch {
+        if (rawText) errorMsg = rawText;
+      }
+    } catch (e) {
+      // Ignore
+    }
+    const error = new Error(errorMsg);
     error.status = response.status;
     throw error;
   }
