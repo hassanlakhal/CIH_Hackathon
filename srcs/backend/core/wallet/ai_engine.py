@@ -66,20 +66,18 @@ def process_auto_save_on_transaction(wallet, transaction_amount):
     """
     After a CASH_IN or M2W transaction is confirmed, check all active
     AutoSavingRules and apply them. Updates the primary goal's current_saved.
+    Also triggers saving account auto-transfer if conditions are met.
     Returns total auto-saved amount.
     """
     rules = AutoSavingRule.objects.filter(wallet=wallet, is_active=True)
-    if not rules.exists():
-        return Decimal('0')
+    total_auto_saved = Decimal('0')
+    today = date.today()
+    month_start = today.replace(day=1)
 
     # Find primary goal (highest priority active goal)
     primary_goal = SavingsGoal.objects.filter(
         wallet=wallet, status='ACTIVE'
     ).order_by('-priority', 'created_at').first()
-
-    total_auto_saved = Decimal('0')
-    today = date.today()
-    month_start = today.replace(day=1)
 
     for rule in rules:
         save_amount = calculate_auto_save(rule, transaction_amount)
@@ -116,19 +114,74 @@ def process_auto_save_on_transaction(wallet, transaction_amount):
 
         total_auto_saved += save_amount
 
-    # Virtual Saving Account Trigger Logic
-    if wallet.sendToSavingAccount and wallet.savingTriggerBalance > 0 and wallet.monthlySavingAmount > 0:
-        if wallet.balance >= wallet.savingTriggerBalance:
-            # Check if we already did the transfer this month by looking at monthly records
-            # For simplicity in hackathon, we assume the transfer happens if balance allows and it's not marked today.
-            if wallet.balance >= wallet.monthlySavingAmount:
-                # To prevent it from hitting every transaction, we can just track the last saved date or simply
-                # deduct it if the monthly goal isn't met in the record. Let's just track it as part of auto saved.
-                pass # The AI will see this logic, but subtracting directly here on every txn might drain the account.
-                # Actually, adding a small fraction proportional to transaction or just one-off. 
-                # We'll just leave it as informational for AI context to recommend.
+    # ═══ Saving Account Auto-Transfer Logic ═══
+    saving_transferred = _try_saving_account_transfer(wallet, month_start)
+    total_auto_saved += saving_transferred
 
     return total_auto_saved
+
+
+def _try_saving_account_transfer(wallet, month_start):
+    """
+    Transfer monthlySavingAmount from wallet balance to savingAccountBalance
+    when:
+      1. sendToSavingAccount is enabled
+      2. balance >= savingTriggerBalance
+      3. balance >= monthlySavingAmount (enough to transfer)
+      4. Haven't already transferred this month (checked via Transaction log)
+    Returns amount transferred.
+    """
+    if not wallet.sendToSavingAccount:
+        return Decimal('0')
+    if wallet.savingTriggerBalance <= 0 or wallet.monthlySavingAmount <= 0:
+        return Decimal('0')
+    if wallet.balance < wallet.savingTriggerBalance:
+        return Decimal('0')
+    if wallet.balance < wallet.monthlySavingAmount:
+        return Decimal('0')
+
+    # The auto-transfer will trigger whenever the balance conditions are met, 
+    # regardless of whether it already transferred this month.
+
+    transfer_amount = wallet.monthlySavingAmount
+
+    # Debit main balance, credit saving account
+    wallet.balance -= transfer_amount
+    wallet.savingAccountBalance += transfer_amount
+    wallet.save()
+
+    # Record as a transaction for audit trail
+    Transaction.objects.create(
+        transaction_type='CASH_OUT',
+        status='CONFIRMED',
+        amount=transfer_amount,
+        fees=Decimal('0'),
+        total_fees=Decimal('0'),
+        total_amount=transfer_amount,
+        currency='MAD',
+        reference_id=Wallet.generate_reference_id(),
+        token=Wallet.generate_transaction_token(),
+        source_wallet=wallet,
+        source_contract_id=wallet.contract_id or '',
+        source_phone=wallet.phone_number,
+        client_note='SAVING_ACCOUNT_TRANSFER',
+        beneficiary_first_name='Saving',
+        beneficiary_last_name='Account',
+    )
+
+    # Update goal progress based on saving account balance
+    primary_goal = SavingsGoal.objects.filter(
+        wallet=wallet, status='ACTIVE'
+    ).order_by('-priority', 'created_at').first()
+
+    if primary_goal:
+        primary_goal.current_saved = wallet.savingAccountBalance
+        if primary_goal.current_saved >= primary_goal.target_amount:
+            primary_goal.status = 'ACHIEVED'
+        primary_goal.recalculate_monthly_needed()
+        primary_goal.save()
+
+    return transfer_amount
 
 
 # ═════════════════════════════════════════════════════════════════
@@ -224,6 +277,7 @@ def _build_ai_context(wallet):
             'monthly_saving_amount': float(wallet.monthlySavingAmount),
             'saving_trigger_balance': float(wallet.savingTriggerBalance),
             'active_goal': goal_context,
+            'goal_balance_source': 'saving_account' if wallet.sendToSavingAccount else 'main_balance',
         },
         'last_30_days': {
             'source': data_source,
@@ -283,6 +337,8 @@ RULES:
 8. All amounts are in MAD (Moroccan Dirham).
 9. Write the summary_message, tip, and goal_achievement_plan in English, concise and motivating. Provide a concrete estimation of how to achieve the active goal in goal_achievement_plan.
 10. If safety floor is at risk (balance near or below it), set a warning.
+11. IMPORTANT: The user has a Saving Account. The goal_balance_source field tells you whether to track goal progress against the saving_account_balance or the main balance. If goal_balance_source is 'saving_account', use saving_account_balance to measure progress toward the goal. The saving account receives automatic monthly transfers.
+12. In goal_achievement_plan, always mention how many months remain and the monthly saving amount going to the saving account.
 
 Reply ONLY with valid JSON matching this exact schema (no markdown, no explanation):
 {EXPECTED_SCHEMA}"""
@@ -377,22 +433,34 @@ def _generate_mock_insight(context):
         t = exp.get('type', 'OTHER')
         expense_categories[t] = expense_categories.get(t, 0) + exp['amount']
 
-    # Goal prediction
+    # Goal prediction — use saving account balance if enabled
     goal = ctx.get('active_goal')
     predicted_goal_date = None
     goal_on_track = True
-    if goal and net_savings > 0:
-        remaining = goal['target'] - goal['saved']
+    saving_balance = ctx.get('saving_account_balance', 0)
+    goal_source = ctx.get('goal_balance_source', 'main_balance')
+    effective_saved = saving_balance if goal_source == 'saving_account' else (goal['saved'] if goal else 0)
+    monthly_saving = ctx.get('monthly_saving_amount', 0)
+
+    if goal:
+        remaining = goal['target'] - effective_saved
         if remaining <= 0:
             predicted_goal_date = date.today().isoformat()
-        else:
-            months_to_go = remaining / float(net_savings) if net_savings > 0 else 99
+            goal_on_track = True
+        elif monthly_saving > 0:
+            months_to_go = remaining / monthly_saving
             predicted_date = date.today() + timedelta(days=int(months_to_go * 30))
             predicted_goal_date = predicted_date.isoformat()
             if goal.get('target_date'):
                 goal_on_track = predicted_date.isoformat() <= goal['target_date']
-    elif goal:
-        goal_on_track = False
+        elif net_savings > 0:
+            months_to_go = remaining / float(net_savings)
+            predicted_date = date.today() + timedelta(days=int(months_to_go * 30))
+            predicted_goal_date = predicted_date.isoformat()
+            if goal.get('target_date'):
+                goal_on_track = predicted_date.isoformat() <= goal['target_date']
+        else:
+            goal_on_track = False
 
     # Saving opportunities
     opportunities = []
@@ -607,3 +675,41 @@ def generate_wallet_insight(wallet):
     )
 
     return insight
+
+
+# ═════════════════════════════════════════════════════════════════
+#  ASYNC SIGNAL RECEIVERS
+# ═════════════════════════════════════════════════════════════════
+import threading
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
+
+def _async_update_insight(wallet):
+    def run():
+        try:
+            generate_wallet_insight(wallet)
+        except Exception as e:
+            # We fail silently here because it's a background thread
+            pass
+    threading.Thread(target=run, daemon=True).start()
+
+@receiver(post_save, sender=Transaction)
+def trigger_insight_on_transaction(sender, instance, created, **kwargs):
+    """Regenerate AI insights in the background for both parties when a transaction is completed."""
+    if created and instance.status == 'CONFIRMED':
+        if getattr(instance, 'source_wallet', None):
+            _async_update_insight(instance.source_wallet)
+        if getattr(instance, 'destination_wallet', None):
+            _async_update_insight(instance.destination_wallet)
+
+@receiver(post_save, sender=SavingsGoal)
+def trigger_insight_on_goal_change(sender, instance, **kwargs):
+    """Regenerate AI insights when a goal is created or modified."""
+    if instance.wallet:
+        _async_update_insight(instance.wallet)
+
+@receiver(post_delete, sender=SavingsGoal)
+def trigger_insight_on_goal_delete(sender, instance, **kwargs):
+    """Regenerate AI insights when a goal is deleted."""
+    if instance.wallet:
+        _async_update_insight(instance.wallet)

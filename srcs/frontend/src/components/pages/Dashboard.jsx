@@ -1,70 +1,83 @@
 /**
- * Dashboard — main landing page showing savings summary,
- * goal progress, predicted expenses, and recent invisible moves.
+ * Dashboard — Minimized accueil page with:
+ * - User info & balance
+ * - Saving account overview
+ * - AI Insights (auto-generated on connect)
+ * - Quick actions
  */
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useDashboardData } from '../../hooks/useDashboardData.js';
 import { getClientInfo } from '../../services/walletService.js';
 import { getWalletBalance } from '../../services/transactionService.js';
+import { triggerInsight, getInsight, getWalletSettings } from '../../services/walletService.js';
 import { getStoredUserIdentity, updateStoredUserIdentity, getAuraContractId, setAuraContractId } from '../../utils/userIdentity.js';
-import { formatCurrency, formatCurrencyCompact } from '../../utils/formatCurrency.js';
-import { formatRelativeTime, formatDate } from '../../utils/formatDate.js';
-import StatCard from '../ui/StatCard.jsx';
-import SectionCard from '../ui/SectionCard.jsx';
+import { formatCurrency } from '../../utils/formatCurrency.js';
 import LoadingState from '../ui/LoadingState.jsx';
 import EmptyState from '../ui/EmptyState.jsx';
 import PrimaryButton from '../ui/PrimaryButton.jsx';
 
+function ScoreBadge({ score, delta }) {
+  const color = score >= 80 ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
+    : score >= 60 ? 'text-sky-600 bg-sky-50 border-sky-200'
+    : score >= 40 ? 'text-amber-600 bg-amber-50 border-amber-200'
+    : 'text-red-600 bg-red-50 border-red-200';
+
+  return (
+    <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border ${color} font-bold text-xs`}>
+      <span>{score}/100</span>
+      {delta !== 0 && (
+        <span className={`${delta > 0 ? 'text-emerald-500' : 'text-red-400'}`}>
+          {delta > 0 ? '↑' : '↓'}{Math.abs(delta)}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function Dashboard() {
-  const { data, loading, error, noContract, refetch } = useDashboardData();
   const navigate = useNavigate();
+  const identity = getStoredUserIdentity();
+  const token = identity?.token;
 
   const [realBalance, setRealBalance] = useState(null);
   const [balanceLoading, setBalanceLoading] = useState(true);
-  const [balanceError, setBalanceError] = useState(null);
-
-  // Client info state
   const [clientInfo, setClientInfo] = useState(null);
   const [clientInfoLoading, setClientInfoLoading] = useState(true);
+
+  // Insight state
+  const [insight, setInsight] = useState(null);
+  const [insightLoading, setInsightLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+
+  // Saving account state
+  const [savingBalance, setSavingBalance] = useState(0);
+  const [settings, setSettings] = useState(null);
 
   // ─── Fetch real wallet balance ────────────────────────
   useEffect(() => {
     const cid = getAuraContractId();
     if (!cid) {
-      setBalanceError('Activate wallet');
       setBalanceLoading(false);
       return;
     }
-    
     setBalanceLoading(true);
-    setBalanceError(null);
     getWalletBalance(cid)
       .then(res => {
         if (res?.result?.balance?.[0]?.value) {
           const rawValue = res.result.balance[0].value;
-          const numericVal = parseFloat(rawValue.replace(',', '.'));
-          setRealBalance(numericVal);
-        } else {
-          setBalanceError('Unavailable');
+          setRealBalance(parseFloat(rawValue.replace(',', '.')));
         }
       })
-      .catch(() => {
-        setBalanceError('Disconnected');
-      })
-      .finally(() => {
-        setBalanceLoading(false);
-      });
+      .catch(() => {})
+      .finally(() => setBalanceLoading(false));
   }, []);
 
   // ─── Fetch client info ────────────────────────────────
   useEffect(() => {
-    const identity = getStoredUserIdentity();
     if (!identity?.phoneNumber || !identity?.identificationType || !identity?.identificationNumber) {
       setClientInfoLoading(false);
       return;
     }
-
     setClientInfoLoading(true);
     getClientInfo({
       phoneNumber: identity.phoneNumber,
@@ -74,7 +87,6 @@ export default function Dashboard() {
       .then(res => {
         if (res?.result) {
           setClientInfo(res.result);
-          // Sync contractId/rib from products[0] if not already stored
           const product = res.result.products?.[0];
           if (product) {
             const updates = {};
@@ -92,20 +104,63 @@ export default function Dashboard() {
           }
         }
       })
-      .catch(err => {
-        console.warn('[Dashboard] clientInfo fetch failed:', err);
-      })
-      .finally(() => {
-        setClientInfoLoading(false);
-      });
+      .catch(() => {})
+      .finally(() => setClientInfoLoading(false));
   }, []);
 
-  if (loading) {
-    return <LoadingState message="Preparing your dashboard…" />;
-  }
+  // ─── Auto-fetch insight on connect ────────────────────
+  useEffect(() => {
+    if (!token) { setInsightLoading(false); return; }
 
-  // ─── No contract ID → onboarding CTA ─────────────────
-  if (noContract) {
+    // Fetch wallet settings first for saving balance
+    getWalletSettings(token)
+      .then(res => {
+        if (res) {
+          setSettings(res);
+          if (res.savingAccountBalance) {
+            setSavingBalance(parseFloat(res.savingAccountBalance));
+          }
+        }
+      })
+      .catch(() => {});
+
+    // Try to load existing insight
+    getInsight(token)
+      .then(res => {
+        if (res?.result?.insight) {
+          setInsight(res.result.insight);
+        } else {
+          // Auto-generate insight if none exists
+          return triggerInsight(token).then(genRes => {
+            if (genRes?.result?.insight) {
+              setInsight(genRes.result.insight);
+            }
+          });
+        }
+      })
+      .catch(() => {})
+      .finally(() => setInsightLoading(false));
+  }, [token]);
+
+  const handleRefreshInsight = async () => {
+    if (!token) return;
+    setGenerating(true);
+    try {
+      const res = await triggerInsight(token);
+      if (res?.result?.survey_required) {
+        navigate('/survey');
+        return;
+      }
+      if (res?.result?.insight) {
+        setInsight(res.result.insight);
+      }
+    } catch {}
+    setGenerating(false);
+  };
+
+  // No contract → onboarding
+  const cid = getAuraContractId();
+  if (!cid) {
     return (
       <div className="px-5 py-12">
         <EmptyState
@@ -119,24 +174,6 @@ export default function Dashboard() {
     );
   }
 
-  if (error) {
-    return (
-      <div className="px-5 py-8">
-        <EmptyState
-          icon="⚠️"
-          title="Loading Error"
-          message={error}
-          actionLabel="Try again"
-          onAction={refetch}
-        />
-      </div>
-    );
-  }
-
-  const { metrics, invisibleMoves, predictions, settings } = data;
-
-  // Derive display name from client info or stored identity
-  const identity = getStoredUserIdentity();
   const displayName = clientInfo
     ? `${clientInfo.tierFirstName || ''} ${clientInfo.tierLastName || ''}`.trim()
     : identity
@@ -144,18 +181,18 @@ export default function Dashboard() {
       : '';
 
   return (
-    <div className="px-4 space-y-5 animate-slide-up">
-      {/* ─── Greeting ─────────────────────────────────── */}
+    <div className="px-4 space-y-4 animate-slide-up pb-6">
+      {/* ─── Greeting ───────────────────────────── */}
       <div className="pt-2">
         <p className="text-surface-400 text-sm font-medium">
           Hello{displayName ? `, ${displayName}` : ''} 👋
         </p>
         <p className="text-xs text-surface-300 mt-0.5">
-          Aura is working in the background for you.
+          Mind Save is working for you.
         </p>
       </div>
 
-      {/* ─── Client info card ─────────────────────────── */}
+      {/* ─── User Info Card ─────────────────────── */}
       {clientInfo && (
         <div className="card p-4 border border-surface-200">
           <div className="flex items-center gap-3">
@@ -179,186 +216,155 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ─── Savings goal card ─────────────────────── */}
-      <div className="card p-5 bg-gradient-primary border-0 text-white relative overflow-hidden">
-        {/* Background decoration */}
-        <div className="absolute -top-8 -right-8 w-32 h-32 bg-white/5 rounded-full" />
-        <div className="absolute -bottom-10 -left-6 w-24 h-24 bg-white/5 rounded-full" />
-
-        <div className="relative z-10">
-          <p className="text-primary-100 text-xs font-semibold uppercase tracking-wider mb-1">
-            Total Saved
-          </p>
-          <p className="text-3xl font-bold tracking-tight">
-            {formatCurrency(metrics.totalSaved, metrics.currency)}
-          </p>
-          <div className="flex items-center gap-2 mt-3">
-            <span className="text-xs bg-white/15 px-2 py-0.5 rounded-md font-medium">
-              Goal : {formatCurrencyCompact(metrics.savingsGoal)}
-            </span>
-          </div>
-
-          {/* Goal progress bar */}
-          <div className="mt-4">
-            <div className="flex justify-between text-xs mb-1.5">
-              <span className="text-primary-100">Progress</span>
-              <span className="text-white font-semibold">
-                {Math.round(metrics.goalProgress * 100)}%
-              </span>
-            </div>
-            <div className="w-full h-2 bg-white/15 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-white rounded-full transition-all duration-700 ease-out"
-                style={{ width: `${Math.min(100, metrics.goalProgress * 100)}%` }}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ─── Top summary grid ─────────────────────────── */}
+      {/* ─── Balance Cards ──────────────────────── */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="card p-4 space-y-1 relative border border-surface-200">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-semibold text-surface-500 uppercase tracking-widest">
-              Current Balance
-            </p>
-            <span className="text-lg">💳</span>
-          </div>
+        {/* Main Balance */}
+        <div className="card p-4 bg-gradient-primary border-0 text-white relative overflow-hidden">
+          <div className="absolute -top-6 -right-6 w-20 h-20 bg-white/5 rounded-full" />
+          <p className="text-primary-100 text-[10px] font-semibold uppercase tracking-widest mb-1">
+            Balance
+          </p>
           {balanceLoading ? (
-            <div className="h-7 w-24 bg-surface-200 animate-pulse rounded mt-1" />
-          ) : balanceError ? (
-            <p className="text-xs text-danger-500 font-medium leading-tight mt-1">
-              {balanceError}
-            </p>
+            <div className="h-7 w-20 bg-white/20 animate-pulse rounded mt-1" />
           ) : (
-            <p className="text-2xl font-black text-surface-900 tracking-tight mt-1">
+            <p className="text-xl font-black tracking-tight">
               {formatCurrency(realBalance ?? 0)}
             </p>
           )}
+          <p className="text-primary-100 text-[10px] mt-1">💳 Main wallet</p>
         </div>
-        <StatCard
-          label="Safety Floor"
-          value={formatCurrency(metrics.safetyFloor)}
-          icon="🛡️"
-          subtitle="Protected amount"
-          className="animate-pulse"
-        />
-        <StatCard
-          label="Safe to Save"
-          value={formatCurrency(metrics.safeToSave)}
-          icon="✨"
-          subtitle="Available for saving"
-          trend={metrics.safeToSave > 100 ? 'up' : 'down'}
-          trendLabel={metrics.safeToSave > 100 ? 'Good' : 'Low'}
-        />
-        <StatCard
-          label="This month"
-          value={`${invisibleMoves.length}`}
-          icon="🔄"
-          subtitle="Invisible moves"
-          className="animate-bounce"
-        />
-        <StatCard
-          label="Saving Account"
-          value={formatCurrency(settings?.savingAccountBalance ?? metrics.totalSaved ?? 0)}
-          icon="🏦"
-          subtitle="Vault reserve"
-        />
+
+        {/* Saving Account Balance */}
+        <div className="card p-4 border border-emerald-200 bg-emerald-50 relative overflow-hidden cursor-pointer hover:bg-emerald-100 transition-colors"
+          onClick={() => navigate('/saving-account')}>
+          <div className="absolute -top-6 -right-6 w-20 h-20 bg-emerald-200/30 rounded-full" />
+          <p className="text-emerald-700 text-[10px] font-semibold uppercase tracking-widest mb-1">
+            Savings
+          </p>
+          <p className="text-xl font-black text-emerald-800 tracking-tight">
+            {formatCurrency(savingBalance)}
+          </p>
+          <p className="text-emerald-600 text-[10px] mt-1">🏦 Saving account →</p>
+        </div>
       </div>
 
-      {/* ─── Recent invisible moves ───────────────────── */}
-      <SectionCard
-        title="Recent Invisible Moves"
-        action="View full activity"
-        onAction={() => navigate('/activity')}
-      >
-        {invisibleMoves.length === 0 ? (
-          <EmptyState
-            icon="🌙"
-            title="No recent moves"
-            message="Aura will start saving automatically as soon as possible."
-          />
-        ) : (
-          <div className="space-y-2.5">
-            {invisibleMoves.slice(0, 3).map((move) => (
-              <div
-                key={move.id}
-                className="flex items-center justify-between py-2 border-b border-surface-100 last:border-0"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-primary-50 flex items-center justify-center text-base">
-                    🌀
-                  </div>
-                  <div>
-                     <p className="text-sm font-medium text-surface-800 leading-tight">
-                       {/* Hardcoding generic label for the view instead of api parse to ensure formatting */}
-                       Invisible savings
-                     </p>
-                    <p className="text-xs text-surface-400">
-                      {formatRelativeTime(move.date)}
-                    </p>
-                  </div>
-                </div>
-                <span className="text-sm font-semibold text-primary-dark">
-                  {formatCurrency(Math.abs(move.amount))}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </SectionCard>
-
-      {/* ─── Predicted recurring expenses ───────────────────────── */}
-      <SectionCard title="Predicted recurring expenses">
-        {predictions && predictions.length > 0 ? (
-          <div className="space-y-2.5">
-            {predictions.map((pred) => (
-              <div
-                key={pred.id}
-                className="flex items-center justify-between py-2 border-b border-surface-100 last:border-0"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-warning-50 flex items-center justify-center text-base">
-                    📅
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-surface-800 leading-tight">
-                      {pred.label}
-                    </p>
-                    <p className="text-xs text-surface-400">
-                      Expected {formatDate(pred.dueDate, { day: 'numeric', month: 'short' })}
-                    </p>
-                  </div>
-                </div>
-                <span className="text-sm font-semibold text-surface-700">
-                  {formatCurrency(pred.amount)}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <EmptyState
-            icon="🔮"
-            title="No predictions yet"
-            message="Predictions will appear here with more history."
-          />
-        )}
-      </SectionCard>
-
-      {/* ─── CTA section ───────────────────────── */}
-      <div className="pb-4">
-        <PrimaryButton
-          fullWidth
-          variant="secondary"
-          onClick={() => navigate('/settings')}
+      {/* ─── Quick Actions ──────────────────────── */}
+      <div className="flex gap-2">
+        <button
+          onClick={() => navigate('/transactions')}
+          className="flex-1 card p-3 border border-surface-200 flex items-center justify-center gap-2 hover:bg-surface-50 transition-colors"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1">
-            <circle cx="12" cy="12" r="3" />
-            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
-          </svg>
-          Update settings
-        </PrimaryButton>
+          <span className="text-base">💸</span>
+          <span className="text-xs font-semibold text-surface-700">Transfer</span>
+        </button>
+        <button
+          onClick={() => navigate('/saving-account')}
+          className="flex-1 card p-3 border border-emerald-200 bg-emerald-50 flex items-center justify-center gap-2 hover:bg-emerald-100 transition-colors"
+        >
+          <span className="text-base">🏦</span>
+          <span className="text-xs font-semibold text-emerald-700">Save Now</span>
+        </button>
+        <button
+          onClick={() => navigate('/goals')}
+          className="flex-1 card p-3 border border-surface-200 flex items-center justify-center gap-2 hover:bg-surface-50 transition-colors"
+        >
+          <span className="text-base">🎯</span>
+          <span className="text-xs font-semibold text-surface-700">Goals</span>
+        </button>
+      </div>
+
+      {/* ─── AI Insights (merged) ───────────────── */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🧠</span>
+            <h2 className="text-sm font-bold text-surface-900">AI Insights</h2>
+          </div>
+          <button
+            onClick={handleRefreshInsight}
+            disabled={generating}
+            className="text-[10px] font-bold text-primary bg-primary-50 px-2.5 py-1 rounded-lg hover:bg-primary-100 transition-colors disabled:opacity-50"
+          >
+            {generating ? '⏳ Analyzing…' : '🔄 Refresh'}
+          </button>
+        </div>
+
+        {insightLoading ? (
+          <div className="card p-6 border border-surface-200">
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+              <p className="text-xs text-surface-400 font-medium">Generating your insights…</p>
+            </div>
+          </div>
+        ) : !insight ? (
+          <div className="card p-5 border border-dashed border-surface-300 text-center">
+            <p className="text-2xl mb-2">🧠</p>
+            <p className="text-sm font-semibold text-surface-700">No insights yet</p>
+            <p className="text-xs text-surface-400 mt-1 mb-3">Generate your first AI analysis</p>
+            <PrimaryButton onClick={handleRefreshInsight} loading={generating} className="text-xs !px-4 !py-2">
+              ✨ Generate Insight
+            </PrimaryButton>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {/* AI Summary */}
+            <div className="card p-4 bg-gradient-to-br from-surface-800 to-surface-900 text-white border-0 relative overflow-hidden">
+              <div className="absolute -top-6 -right-6 w-20 h-20 bg-white/5 rounded-full" />
+              <div className="relative z-10">
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="text-xs font-bold text-surface-200 flex-1">AI Summary</h3>
+                  <ScoreBadge score={insight.health_score} delta={insight.health_score_delta} />
+                </div>
+                <p className="text-sm leading-relaxed text-surface-100">{insight.summary_message}</p>
+                {insight.warning && (
+                  <div className="mt-2 bg-red-500/20 border border-red-400/30 rounded-lg p-2 text-xs text-red-200 font-medium">
+                    {insight.warning}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Tip */}
+            {insight.tip && (
+              <div className="card p-3 bg-primary-50 border border-primary-200">
+                <div className="flex items-start gap-2">
+                  <span className="text-lg">💡</span>
+                  <div>
+                    <p className="text-[10px] font-bold text-primary-800 uppercase tracking-wide mb-0.5">AI Tip</p>
+                    <p className="text-xs text-primary-700 leading-relaxed">{insight.tip}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Saving Account Detail Summary */}
+            {settings && settings.sendToSavingAccount && (
+              <div className="card p-4 border border-emerald-200 bg-emerald-50">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-xl">🤖</span>
+                  <div>
+                    <h4 className="text-sm font-bold text-emerald-900">Auto-Saving Active</h4>
+                    <p className="text-[10px] text-emerald-600">Your savings are protected</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-white/60 rounded-lg p-2 border border-emerald-100/50">
+                    <p className="text-[10px] text-emerald-600 font-semibold mb-0.5">Monthly Safe</p>
+                    <p className="text-sm font-bold text-emerald-900">
+                      {formatCurrency(parseFloat(settings.monthlySavingAmount || 0))}
+                    </p>
+                  </div>
+                  <div className="bg-white/60 rounded-lg p-2 border border-emerald-100/50">
+                    <p className="text-[10px] text-emerald-600 font-semibold mb-0.5">Trigger Limit</p>
+                    <p className="text-sm font-bold text-emerald-900">
+                      {formatCurrency(parseFloat(settings.savingTriggerBalance || 0))}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1328,8 +1328,16 @@ def m2m_confirmation(request):
 def checkcheck(request):
     token = request.data.get('token')
     try:
-        Wallet.objects.get(token=token)
-        return Response(status=status.HTTP_200_OK)
+        wallet = Wallet.objects.get(token=token)
+        return Response({
+            'contractId': wallet.contract_id,
+            'phoneNumber': wallet.phone_number,
+            'firstName': wallet.first_name,
+            'lastName': wallet.last_name,
+            'identificationType': wallet.legal_type,
+            'identificationNumber': wallet.legal_id,
+            'status': wallet.status
+        }, status=status.HTTP_200_OK)
     except:
         return Response(status=status.HTTP_400_BAD_REQUEST)
 
@@ -1668,6 +1676,7 @@ def _serialize_insight(insight):
         'summary_message': insight.summary_message,
         'tip': insight.tip,
         'warning': insight.warning,
+        'goal_achievement_plan': insight.goal_achievement_plan,
         'health_score': insight.health_score,
         'health_score_delta': insight.health_score_delta,
     }
@@ -1696,14 +1705,27 @@ def savings_goals(request):
         except Wallet.DoesNotExist:
             return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
 
+        from django.db.models import Sum
+        allocated_already = SavingsGoal.objects.filter(wallet=wallet, status='ACTIVE').aggregate(Sum('current_saved'))['current_saved__sum'] or Decimal('0')
+        unallocated_savings = wallet.savingAccountBalance - allocated_already
+        
+        initial_saved = Decimal('0')
+        if unallocated_savings > 0:
+            initial_saved = min(unallocated_savings, Decimal(data['target_amount']))
+
         goal = SavingsGoal.objects.create(
             wallet=wallet,
             title=data['title'],
             description=data.get('description', ''),
             target_amount=data['target_amount'],
+            current_saved=initial_saved,
             target_date=data['target_date'],
             priority=data.get('priority', 'MEDIUM'),
         )
+        
+        if initial_saved >= goal.target_amount:
+            goal.status = 'ACHIEVED'
+            
         goal.recalculate_monthly_needed()
         goal.save()
 
@@ -1711,6 +1733,10 @@ def savings_goals(request):
         wallet.goal = int(data['target_amount'])
         wallet.goalDescription = data['title']
         wallet.save()
+
+        progress_pct = 0
+        if goal.target_amount > 0:
+            progress_pct = min(100, int((goal.current_saved / goal.target_amount) * 100))
 
         return Response({
             'result': {
@@ -1722,7 +1748,7 @@ def savings_goals(request):
                 'monthly_needed': float(goal.monthly_needed),
                 'priority': goal.priority,
                 'status': goal.status,
-                'progress': 0,
+                'progress': progress_pct,
             }
         }, status=status.HTTP_201_CREATED)
 
@@ -1992,4 +2018,143 @@ def wallet_settings(request):
         'sendToSavingAccount': wallet.sendToSavingAccount,
         'monthlySavingAmount': str(wallet.monthlySavingAmount),
         'savingTriggerBalance': str(wallet.savingTriggerBalance),
+    })
+
+
+# ═══════════════════════════════════════════════════════════════
+# 7.0  Saving Account — Transfer & History
+# ═══════════════════════════════════════════════════════════════
+
+@api_view(['POST'])
+def saving_account_transfer(request):
+    """
+    POST /wallet/saving-account/transfer
+    Manually transfer money to/from the saving account.
+    Body: { token, amount, direction: 'deposit' | 'withdraw' }
+    """
+    token = request.data.get('token', '').strip()
+    amount = _safe_decimal(request.data.get('amount', 0))
+    direction = request.data.get('direction', 'deposit').strip()
+
+    if not token:
+        return Response({'error': 'token is required'}, status=status.HTTP_400_BAD_REQUEST)
+    if amount <= 0:
+        return Response({'error': 'amount must be positive'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        wallet = Wallet.objects.get(token=token)
+    except Wallet.DoesNotExist:
+        return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if direction == 'deposit':
+        if wallet.balance < amount:
+            return Response({'error': 'Insufficient balance.'}, status=status.HTTP_400_BAD_REQUEST)
+        wallet.balance -= amount
+        wallet.savingAccountBalance += amount
+        note = 'SAVING_ACCOUNT_TRANSFER'
+    elif direction == 'withdraw':
+        from datetime import timedelta
+        from django.utils import timezone
+        from django.db.models import Q, F
+
+        can_withdraw = False
+        
+        # 1. Check if any goal is achieved
+        has_reached_goal = SavingsGoal.objects.filter(
+            wallet=wallet
+        ).filter(
+            Q(status='ACHIEVED') | Q(current_saved__gte=F('target_amount'))
+        ).exists()
+        
+        if has_reached_goal:
+            can_withdraw = True
+            
+        # 2. Check if 6 months have passed since first deposit
+        if not can_withdraw:
+            first_deposit = Transaction.objects.filter(
+                source_wallet=wallet,
+                client_note='SAVING_ACCOUNT_TRANSFER',
+                status='CONFIRMED',
+            ).order_by('created_at').first()
+            
+            if first_deposit and timezone.now() >= (first_deposit.created_at + timedelta(days=180)):
+                can_withdraw = True
+
+        if not can_withdraw:
+            return Response({'error': 'Vault is locked. You must reach a goal or wait 6 months from first deposit.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if wallet.savingAccountBalance < amount:
+            return Response({'error': 'Insufficient saving account balance.'}, status=status.HTTP_400_BAD_REQUEST)
+        wallet.savingAccountBalance -= amount
+        wallet.balance += amount
+        note = 'SAVING_ACCOUNT_WITHDRAWAL'
+    else:
+        return Response({'error': 'direction must be deposit or withdraw'}, status=status.HTTP_400_BAD_REQUEST)
+
+    wallet.save()
+
+    # Record transaction
+    Transaction.objects.create(
+        transaction_type='CASH_OUT' if direction == 'deposit' else 'CASH_IN',
+        status='CONFIRMED',
+        amount=amount,
+        fees=Decimal('0'),
+        total_fees=Decimal('0'),
+        total_amount=amount,
+        currency='MAD',
+        reference_id=Wallet.generate_reference_id(),
+        token=Wallet.generate_transaction_token(),
+        source_wallet=wallet,
+        source_contract_id=wallet.contract_id or '',
+        source_phone=wallet.phone_number,
+        client_note=note,
+        beneficiary_first_name='Saving',
+        beneficiary_last_name='Account',
+    )
+
+    return Response({
+        'result': {
+            'balance': str(wallet.balance),
+            'savingAccountBalance': str(wallet.savingAccountBalance),
+            'transferred': str(amount),
+            'direction': direction,
+        }
+    })
+
+
+@api_view(['GET'])
+def saving_account_history(request):
+    """
+    GET /wallet/saving-account/history?token=X
+    Returns saving account transfer history.
+    """
+    token = request.query_params.get('token', '').strip()
+    if not token:
+        return Response({'error': 'token is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        wallet = Wallet.objects.get(token=token)
+    except Wallet.DoesNotExist:
+        return Response({'error': 'Wallet not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    transfers = Transaction.objects.filter(
+        source_wallet=wallet,
+        client_note__in=['SAVING_ACCOUNT_TRANSFER', 'SAVING_ACCOUNT_WITHDRAWAL'],
+        status='CONFIRMED',
+    ).order_by('-created_at')[:50]
+
+    history = [{
+        'id': t.id,
+        'amount': str(t.amount),
+        'type': 'deposit' if t.client_note == 'SAVING_ACCOUNT_TRANSFER' else 'withdrawal',
+        'date': t.created_at.isoformat(),
+        'reference': t.reference_id,
+    } for t in transfers]
+
+    return Response({
+        'result': {
+            'savingAccountBalance': str(wallet.savingAccountBalance),
+            'balance': str(wallet.balance),
+            'history': history,
+        }
     })

@@ -57,6 +57,10 @@ wallet_urlpatterns = [
     path('auto-save', views.auto_save_rules, name='auto-save-rules'),
     path('health', views.health_scores, name='health-scores'),
     path('settings', views.wallet_settings, name='wallet-settings'),
+
+    # 7.0 - Saving Account
+    path('saving-account/transfer', views.saving_account_transfer, name='saving-account-transfer'),
+    path('saving-account/history', views.saving_account_history, name='saving-account-history'),
 ]
 
 

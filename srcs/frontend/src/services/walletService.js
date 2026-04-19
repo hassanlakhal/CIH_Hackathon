@@ -36,6 +36,11 @@ export function getClientInfo(payload) {
   return apiPost('/wallet/clientinfo', payload);
 }
 
+// ─── POST /wallet/checker ────────────────────────────────────
+export function checkWalletToken(token) {
+  return apiPost('/wallet/checker', { token });
+}
+
 // ─── Survey Endpoints ────────────────────────────────────────
 
 export async function getSurvey(token) {
@@ -111,3 +116,14 @@ export async function updateWalletSettings(payload) {
   return await apiPost('/wallet/settings', payload);
 }
 
+// ─── Saving Account ─────────────────────────────────────────
+
+/** Transfer to/from saving account */
+export async function transferToSavingAccount(payload) {
+  return await apiPost('/wallet/saving-account/transfer', payload);
+}
+
+/** Get saving account transfer history */
+export async function getSavingAccountHistory(token) {
+  return await apiGet('/wallet/saving-account/history', { token });
+}
